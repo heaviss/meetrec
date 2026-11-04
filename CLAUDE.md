@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-meetrec: a Linux daemon that notices a call, records `me`/`them` tracks, transcribes them locally with GigaAM and summarizes with `claude -p`. Users read [README.md](README.md); what to build and why lives in [SPEC.md](SPEC.md), the words in [GLOSSARY.md](GLOSSARY.md).
+meetrec: a Linux daemon that notices a call, records `me`/`them` tracks, transcribes them locally with GigaAM and summarizes with `claude -p`. Users read [README.md](README.md); what to build and why lives in [SPEC.md](wayfinder/SPEC.md), the words in [GLOSSARY.md](GLOSSARY.md).
 
 ## Where decisions live
 
-- [SPEC.md](SPEC.md) is the single source of truth for behaviour. Change the spec in the same commit as the behaviour.
+- [SPEC.md](wayfinder/SPEC.md) is the single source of truth for behaviour. Change the spec in the same commit as the behaviour.
 - `wayfinder/` holds the first map and its tickets: the reasoning, measurements and research behind each spec section (SPEC links them as `→ 08`). Read the ticket before reversing a decision; an open ticket is a question still to settle.
 - New domain terms go into GLOSSARY.md as they settle.
 

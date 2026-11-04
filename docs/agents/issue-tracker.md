@@ -22,7 +22,7 @@ Read the file at the referenced path. The user will normally pass the path or th
 
 Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
 
-- **Where**: the first effort lives in `wayfinder/` (SPEC.md links its tickets, so it stays put); a new effort gets `.scratch/<effort>/`.
+- **Where**: the first effort lives in `wayfinder/` (SPEC.md sits beside its tickets and links them); a new effort gets `.scratch/<effort>/`.
 - **Map**: `<effort dir>/map.md` (Destination / Notes / Decisions so far / Not yet specified / Out of scope).
 - **Child ticket**: `<effort dir>/NN-<slug>.md`, numbered from `01`, the question under `## Question`. Frontmatter:
   ```yaml
