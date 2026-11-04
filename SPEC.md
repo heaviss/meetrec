@@ -46,7 +46,7 @@ meetrec/
   summary.py            # prompt + claude -p
   install.py            # meetrec setup
   prompt.md             # summary prompt
-tests/                  # one small test per non-trivial logic, see §10
+tests/                  # one small test per non-trivial logic, see §11
 ```
 
 Других зависимостей нет: WAV читается через `wave`, LocalVQE вызывается через `ctypes`, конфиг — через `tomllib`. Проверки: `pytest`, `mypy --strict`, `flake8` с wemake-python-styleguide (пороги в `setup.cfg`), `ruff`.
@@ -142,10 +142,10 @@ queued → processing (worker) → done | error
 - Сбой `pactl` (не запустился, упал, битый JSON) не роняет демон: остаётся прежний снимок, ошибка — в журнал. Упавшая подписка перезапускается через секунду, снимки — после этой секунды.
 - `SIGUSR1` только ставит флаг пересканирования: `queue.Queue` нереентерабелен, обработчик сигнала его не трогает.
 - Старт демона и `SIGUSR1`: просмотр `recordings_dir`.
-  - `recording` или `pause` (демон упал посреди встречи): починить заголовки WAV (§8) и поставить `queued`.
+  - `recording` или `pause` (демон упал посреди встречи): починить заголовки WAV (§8) и поставить `queued`; встреча короче `min_meeting_s` удаляется, как при обычном закрытии.
   - `processing`: снова `queued`.
   - Все `queued` по возрастанию `started_at` встают в очередь.
-- Остановка демона (`SIGTERM` от systemd): `pw-record` получает `SIGTERM` и закрывает WAV. Встреча переходит в `queued` и обработается при следующем старте; встреча короче `min_meeting_s` удаляется, как при обычном закрытии. Это же происходит при любом другом падении цикла демона. Если звонок ещё идёт, после старта начнётся новая встреча: перезапуск посреди звонка режет её на две папки — принято.
+- Остановка демона (`SIGTERM` от systemd): обработчик только ставит `threading.Event`, цикл выходит на следующем тике, `contextlib.closing` закрывает встречу. `pw-record` получает `SIGTERM` и закрывает WAV. Сессия отцепляется от демона до закрытия, поэтому остановка посреди закрытия не тронет уже закрытую встречу. Встреча переходит в `queued` и обработается при следующем старте; встреча короче `min_meeting_s` удаляется, как при обычном закрытии. Это же происходит при любом другом падении цикла демона. Если звонок ещё идёт, после старта начнётся новая встреча: перезапуск посреди звонка режет её на две папки — принято.
 
 ## 8. Починка WAV
 
@@ -156,7 +156,7 @@ queued → processing (worker) → done | error
 Worker запускается отдельным процессом под `nice -n 19` в своей группе процессов: `python -m meetrec.process meeting <папка>`. Что делать, решает план из `meta.redo` (`missing`, если пусто) и готовых файлов; `redo` очищается только при `done`, так что упавший посреди `redo --all` worker повторит то же самое. Подкоманды `track <wav> <tsv> <backend>` и `echo <папка>` — дочерние процессы расшифровки и LocalVQE.
 
 1. **LocalVQE**, только если в `meta.json.ports` хоть раз был `[Out] Speaker`. Дорожки обрезаются до общей длины, затем вызывается `localvqe_new(model)` и `localvqe_process_s16(ctx, me, them, n, out)` из `<data_dir>/liblocalvqe.so` через `ctypes`; результат пишется в `me.clean.wav`. Перед `liblocalvqe.so` по пути загружаются `libggml-base.so.0` и `libggml.so.0`. LocalVQE запускается в дочернем процессе (`python -m meetrec.process echo <папка>`): если он упал, даже нативно, берётся исходный `me.wav`, а в `warnings` добавляется запись. В наушниках LocalVQE снижает громкость на 13 дБ и добавляет гул (→ 11), поэтому всегда его не включаем.
-2. **Расшифровка**: каждая дорожка (`me.clean.wav` или `me.wav`, затем `them.wav`) идёт в своём дочернем процессе:
+2. **Расшифровка**: каждая дорожка (`me.clean.wav` или `me.wav`, затем `them.wav`) идёт в своём дочернем процессе. Дорожку без файла или без единого кадра (её `pw-record` умер сразу) worker не расшифровывает: пишет пустой `.tokens.tsv` и запись в `warnings`, вторая дорожка расшифровывается как обычно:
    ```python
    tc.Model(gigaam_path, backend="vulkan").session().run(pcm_f32, language="ru", timestamps="token")
    ```
@@ -236,9 +236,11 @@ Worker запускается отдельным процессом под `nice
   3. Юнит `~/.config/systemd/user/meetrec.service`, затем `systemctl --user daemon-reload` и `enable --now`:
      ```ini
      [Unit]
+     Description=meetrec: record, transcribe and summarize calls
      After=pipewire.service pipewire-pulse.service
      [Service]
      ExecStart=%h/.local/bin/meetrec run
+     Environment=PYTHONUNBUFFERED=1
      Restart=on-failure
      KillMode=control-group
      [Install]

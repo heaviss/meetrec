@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -28,12 +29,15 @@ def recovered_stop(meeting: Meeting) -> str:
     return stopped.isoformat(timespec="seconds")
 
 
-def recover(meeting: Meeting) -> None:
-    """Bring a meeting the daemon lost track of (crash, restart) back to the queue."""
+def recover(meeting: Meeting, min_meeting_s: float) -> None:
+    """Bring a meeting the daemon lost track of (crash, restart) back to the queue, or drop it if short."""
     if meeting.status in {"recording", "pause"}:
         for wav in meeting.path.glob("*.wav"):
             repair_wav(wav)
         meeting.update(status=QUEUED, stopped_at=meeting.meta["stopped_at"] or recovered_stop(meeting))
+        if meeting.duration_s < min_meeting_s:
+            log.info("discarding short recovered meeting %s", meeting.path.name)
+            shutil.rmtree(meeting.path)
     elif meeting.status == "processing":
         meeting.update(status=QUEUED)
 
@@ -51,7 +55,8 @@ def outcome(meeting: Meeting) -> str:
 class Processing:
     """FIFO of closed meetings and the one worker process that handles them."""
 
-    def __init__(self) -> None:
+    def __init__(self, min_meeting_s: float) -> None:
+        self.min_meeting_s = min_meeting_s
         self.pending: deque[Path] = deque()
         self.worker: subprocess.Popen[bytes] | None = None
         self.current: Path | None = None
@@ -68,8 +73,8 @@ class Processing:
         for meeting in list_meetings(recordings_dir):
             if meeting.path in {recording, self.current}:
                 continue
-            recover(meeting)
-            if meeting.status == QUEUED:
+            recover(meeting, self.min_meeting_s)
+            if meeting.status == QUEUED and meeting.path.exists():
                 self.enqueue(meeting.path)
 
     def pump(self, now: float, may_start: bool) -> None:

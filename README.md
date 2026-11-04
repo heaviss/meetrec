@@ -68,13 +68,14 @@ glossary_repo = "~/src/work-repo"
 
 Каждая встреча — отдельная папка с датой в имени, её можно удалить целиком. Команды ниже трогают только такие папки. Встречу, которая пишется или обрабатывается, не трогайте: её показывает `meetrec status`.
 
-Удалить звук старше 30 дней, текст оставить:
+Удалить звук старше 30 дней у встреч, которые уже расшифрованы, текст оставить:
 
 ```bash
-fd -e wav --changed-before 30d . ~/Recordings/20* -x rm
+find ~/Recordings -mindepth 2 -maxdepth 2 -path "$HOME/Recordings/20*" -name '*.wav' -mtime +30 \
+  -execdir test -e transcript.md ';' -delete
 ```
 
-После этого `meetrec redo --transcript` для такой встречи работает, а `redo --all` — уже нет: расшифровывать нечего.
+Звук встречи без `transcript.md` (ошибка или ещё в очереди) команда не трогает. После неё `meetrec redo --transcript` для встречи работает, а `redo --all` — уже нет: расшифровывать нечего.
 
 Удалить встречи старше 90 дней целиком:
 
@@ -89,7 +90,7 @@ systemctl --user disable --now meetrec
 rm ~/.config/systemd/user/meetrec.service
 systemctl --user daemon-reload
 uv tool uninstall meetrec
-rm -r ~/.local/share/meetrec ~/.config/meetrec
+rm -rf ~/.local/share/meetrec ~/.config/meetrec ~/.cache/meetrec
 ```
 
 Записи в `~/Recordings` остаются — удалите их сами, если не нужны.

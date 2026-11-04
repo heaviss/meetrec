@@ -11,6 +11,7 @@ from meetrec.asr import parse_backend, transcribe, transcribe_track
 from meetrec.config import Config, load_config
 from meetrec.echo import cancel_echo, played_on_speakers
 from meetrec.meeting import Meeting
+from meetrec.record import recorded_s
 from meetrec.summary import summarize
 
 log = logging.getLogger(__name__)
@@ -44,6 +45,15 @@ def me_track(meeting: Meeting) -> Path:
     return meeting.path / "me.wav"
 
 
+def transcribe_or_skip(meeting: Meeting, wav: Path, tsv: Path) -> None:
+    """A track that pw-record never filled has no speech: the other track still gets transcribed."""
+    if not wav.exists() or recorded_s(wav) <= 0:
+        meeting.append("warnings", f"{wav.name} is empty, transcribed as silence")
+        tsv.write_text("")
+        return
+    transcribe(wav, tsv)
+
+
 def write_transcript(meeting: Meeting) -> None:
     tracks = [transcript.phrases(transcript.read_tokens(meeting.path / f"{name}.tokens.tsv"), name) for name in TRACKS]
     (meeting.path / "transcript.md").write_text(transcript.render(meeting.started_at, meeting.duration_s, *tracks))
@@ -66,8 +76,8 @@ def run_stages(meeting: Meeting, redo: str, cfg: Config) -> None:
     steps = plan(redo, have_tokens, (folder / "transcript.md").exists(), meeting.meta["summary_done"])
     if steps.transcribe:
         meeting.update(stage="transcribe")
-        transcribe(me_track(meeting), folder / "me.tokens.tsv")
-        transcribe(folder / "them.wav", folder / "them.tokens.tsv")
+        transcribe_or_skip(meeting, me_track(meeting), folder / "me.tokens.tsv")
+        transcribe_or_skip(meeting, folder / "them.wav", folder / "them.tokens.tsv")
     if steps.transcript:
         write_transcript(meeting)
     if steps.summary:
@@ -78,7 +88,7 @@ def run_stages(meeting: Meeting, redo: str, cfg: Config) -> None:
 def process(folder: Path, cfg: Config) -> None:
     meeting = Meeting.load(folder)
     redo = meeting.meta.get("redo") or "missing"
-    meeting.update(status="processing", error=None)
+    meeting.update(status="processing", error=None, stage=None)
     try:
         run_stages(meeting, redo, cfg)
     except Exception as error:
