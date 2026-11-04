@@ -5,7 +5,7 @@ meetrec: a Linux daemon that notices a call, records `me`/`them` tracks, transcr
 ## Where decisions live
 
 - [SPEC.md](SPEC.md) is the single source of truth for behaviour. Change the spec in the same commit as the behaviour.
-- `wayfinder/` holds the map and its tickets: the reasoning, measurements and research behind each spec section (SPEC links them as `→ 08`). Read the ticket before reversing a decision; an open ticket is a question still to settle.
+- `wayfinder/` holds the first map and its tickets: the reasoning, measurements and research behind each spec section (SPEC links them as `→ 08`). Read the ticket before reversing a decision; an open ticket is a question still to settle.
 - New domain terms go into GLOSSARY.md as they settle.
 
 ## Checks
@@ -32,3 +32,17 @@ Fix wemake findings in the code. Raise a threshold in `setup.cfg` only with a co
 ## Commits
 
 Commit email is `9004182+heaviss@users.noreply.github.com` (set in this repo's git config). Push to `origin` (GitHub) after the user approves.
+
+## Agent skills
+
+### Issue tracker
+
+Local markdown in the repo: wayfinder maps in `wayfinder/` and `.scratch/<effort>/`, issues in `.scratch/<feature>/issues/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default roles, written as `status:` in an issue's frontmatter. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the root. See `docs/agents/domain.md`.
