@@ -37,13 +37,12 @@ def run_localvqe(lib: ctypes.CDLL, model: Path, mic: array.array[int], ref: arra
     return cleaned
 
 
-def cancel_echo(folder: Path, cfg: Config) -> Path:
-    mic = read_s16(folder / "me.wav")
-    ref = read_s16(folder / "them.wav")
+def cancel_echo(mic_wav: Path, ref_wav: Path, out: Path, cfg: Config) -> None:
+    mic = read_s16(mic_wav)
+    ref = read_s16(ref_wav)
     length = min(len(mic), len(ref))
     cleaned = run_localvqe(load_localvqe(cfg.localvqe_lib), cfg.localvqe_model, mic[:length], ref[:length])
-    write_s16(folder / "me.clean.wav", cleaned)
-    return folder / "me.clean.wav"
+    write_s16(out, cleaned)
 
 
 def played_on_speakers(meeting: Meeting) -> bool:

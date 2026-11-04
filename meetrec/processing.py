@@ -21,8 +21,8 @@ def outcome(meeting: Meeting) -> str:
         case Outcome.error:
             return f"Ошибка обработки {folder.name}: {meeting.error}"
         case Outcome.summary:
-            return f"Саммари готово: {folder}/summary.md"
-    return f"Транскрипт готов, саммари не сделано: {folder}/transcript.md"
+            return f"Саммари готово: {meeting.summary}"
+    return f"Транскрипт готов, саммари не сделано: {meeting.transcript}"
 
 
 class Processing:

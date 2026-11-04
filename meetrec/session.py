@@ -25,7 +25,7 @@ class Session:
 
     def __init__(self, recordings_dir: Path, streams: list[Stream]) -> None:
         self.meeting = Meeting.create(recordings_dir, datetime.now().astimezone())
-        self.recorder = Recorder(self.meeting.path)
+        self.recorder = Recorder(self.meeting)
         self.silent_s = 0
         self.silence_warned = False
         self.dead_tracks: set[str] = set()

@@ -36,6 +36,7 @@ class Outcome(StrEnum):
 ACTIVE = frozenset((Status.recording, Status.pause, Status.processing))
 LOST = frozenset((Status.recording, Status.pause))
 UNFINISHED = frozenset((Status.queued, Status.processing))
+TRACKS = ("me", "them")
 
 
 @dataclass
@@ -63,6 +64,24 @@ class Meeting:
     @property
     def status(self) -> Status:
         return Status(self.meta["status"])
+
+    def wav(self, track: str) -> Path:
+        return self.path / f"{track}.wav"
+
+    @property
+    def clean_me(self) -> Path:
+        return self.path / "me.clean.wav"
+
+    def tokens(self, track: str) -> Path:
+        return self.path / f"{track}.tokens.tsv"
+
+    @property
+    def transcript(self) -> Path:
+        return self.path / "transcript.md"
+
+    @property
+    def summary(self) -> Path:
+        return self.path / "summary.md"
 
     @property
     def error(self) -> str | None:
@@ -149,7 +168,7 @@ class Meeting:
 
     def recording_end(self) -> str:
         """When the daemon died mid-meeting, the meeting ended where its recording ends."""
-        me_wav = self.path / "me.wav"
+        me_wav = self.wav("me")
         if not me_wav.exists():
             return now_iso()
         stopped = self.started_at + timedelta(seconds=recorded_s(me_wav))
