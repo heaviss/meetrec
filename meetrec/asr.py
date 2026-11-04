@@ -1,7 +1,4 @@
 import array
-import logging
-import subprocess
-import sys
 from pathlib import Path
 from typing import Any, Literal
 
@@ -10,8 +7,6 @@ import transcribe_cpp
 from meetrec import transcript
 from meetrec.audio import RATE, as_float_pcm, read_s16
 from meetrec.config import Config
-
-log = logging.getLogger(__name__)
 
 Backend = Literal["vulkan", "cpu"]
 BACKENDS: tuple[Backend, ...] = ("vulkan", "cpu")
@@ -68,14 +63,3 @@ def transcribe_track(wav: Path, tsv: Path, backend: Backend, model_path: Path, l
     samples = read_s16(wav)
     spans = [(0, len(samples))] if model.supports("long_form") else chunks(samples)
     transcript.write_tokens(tsv, [token for span in spans for token in recognize(session, samples, span, language)])
-
-
-def transcribe(wav: Path, tsv: Path, language: str) -> None:
-    """Each attempt runs in its own process: a crash in ggml or Vulkan must not take the worker down."""
-    for backend in BACKENDS:
-        command = [sys.executable, "-m", "meetrec.process", "track", str(wav), str(tsv), backend, language]
-        child = subprocess.run(command)
-        if child.returncode == 0:
-            return
-        log.warning("transcription of %s on %s failed", wav, backend)
-    raise RuntimeError(f"transcription failed: {wav.name}")

@@ -39,8 +39,9 @@ meetrec/
   lifecycle.py          # Lifecycle state machine: idle ⇄ recording ⇄ pause → close | discard
   watcher.py            # pactl snapshots → Lifecycle → Session: starts, closes, discards meetings
   daemon.py             # event loop: pactl snapshots, signals, processing, state.json
-  process.py            # worker: stage plan → LocalVQE → GigaAM → tokens.tsv → transcript.md → summary.md
-  asr.py                # GigaAM via transcribe-cpp, one child process per track
+  process.py            # worker: stage plan → LocalVQE → ASR → tokens.tsv → transcript.md → summary.md
+  engines.py            # Engines seam: ASR and LocalVQE in child processes, claude; the children's entry point
+  asr.py                # GigaAM / Parakeet via transcribe-cpp
   echo.py               # LocalVQE via ctypes
   audio.py              # 16 kHz mono s16 WAV I/O, WAV header repair
   transcript.py         # tokens → phrase lines → transcript.md
@@ -161,9 +162,9 @@ queued → processing (worker) → done | error
 
 ## 9. Обработка (`process.py`) → 05, 06, 07, 09, 11
 
-Worker запускается отдельным процессом под `nice -n 19` в своей группе процессов: `python -m meetrec.process meeting <папка>`. Что делать, решает план из `meta.redo` (`missing`, если пусто) и готовых файлов; `redo` очищается только при `done`, так что упавший посреди `redo --all` worker повторит то же самое. Подкоманды `track <wav> <tsv> <backend> <language>` и `echo <mic> <ref> <out>` — дочерние процессы расшифровки и LocalVQE.
+Worker запускается отдельным процессом под `nice -n 19` в своей группе процессов: `python -m meetrec.process meeting <папка>`. Что делать, решает план из `meta.redo` (`missing`, если пусто) и готовых файлов; `redo` очищается только при `done`, так что упавший посреди `redo --all` worker повторит то же самое. Дочерние процессы расшифровки и LocalVQE — `python -m meetrec.engines track <wav> <tsv> <backend> <language>` и `echo <mic> <ref> <out>`; worker получает движки (расшифровка, LocalVQE, саммари) через `Engines`, тесты подставляют свои.
 
-1. **LocalVQE**, только если `echo_cancel = true` и в `meta.json.ports` хоть раз был `[Out] Speaker`. На этой машине гнездо наушников часто не распознаётся: наушники `not available`, звук идёт в `[Out] Speaker` на малой громкости, так что по порту наушники от динамиков не отличить. Дорожки обрезаются до общей длины, затем вызывается `localvqe_new(model)` и `localvqe_process_s16(ctx, me, them, n, out)` из `<data_dir>/liblocalvqe.so` через `ctypes`; результат пишется в `me.clean.wav`. Перед `liblocalvqe.so` по пути загружаются `libggml-base.so.0` и `libggml.so.0`. LocalVQE запускается в дочернем процессе (`python -m meetrec.process echo me.wav them.wav me.clean.wav`): если он упал, даже нативно, берётся исходный `me.wav`, а в `warnings` добавляется запись. В наушниках LocalVQE снижает громкость на 13 дБ и добавляет гул (→ 11), поэтому всегда его не включаем.
+1. **LocalVQE**, только если `echo_cancel = true` и в `meta.json.ports` хоть раз был `[Out] Speaker`. На этой машине гнездо наушников часто не распознаётся: наушники `not available`, звук идёт в `[Out] Speaker` на малой громкости, так что по порту наушники от динамиков не отличить. Дорожки обрезаются до общей длины, затем вызывается `localvqe_new(model)` и `localvqe_process_s16(ctx, me, them, n, out)` из `<data_dir>/liblocalvqe.so` через `ctypes`; результат пишется в `me.clean.wav`. Перед `liblocalvqe.so` по пути загружаются `libggml-base.so.0` и `libggml.so.0`. LocalVQE запускается в дочернем процессе (`python -m meetrec.engines echo me.wav them.wav me.clean.wav`): если он упал, даже нативно, берётся исходный `me.wav`, а в `warnings` добавляется запись. В наушниках LocalVQE снижает громкость на 13 дБ и добавляет гул (→ 11), поэтому всегда его не включаем.
 2. **Расшифровка**: каждая дорожка (`me.clean.wav` или `me.wav`, затем `them.wav`) идёт в своём дочернем процессе. Дорожку без файла или без единого кадра (её `pw-record` умер сразу) worker не расшифровывает: пишет пустой `.tokens.tsv` и запись в `warnings`, вторая дорожка расшифровывается как обычно:
    ```python
    tc.Model(model_path, backend="vulkan").session().run(pcm_f32, language=meta.language, timestamps="token")
