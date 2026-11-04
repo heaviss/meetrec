@@ -5,7 +5,8 @@ from typing import cast
 import pytest
 
 from meetrec import session as session_module
-from meetrec.daemon import stop_session
+from meetrec.config import Config
+from meetrec.daemon import Daemon, stop_session
 from meetrec.meeting import Meeting
 from meetrec.record import Recorder
 from meetrec.session import Session
@@ -68,3 +69,15 @@ def test_dead_track_is_reported_once(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
     assert len(sent) == 1
     assert len(Meeting.load(session.meeting.path).meta["warnings"]) == 1
+
+
+def test_stop_does_not_report_killed_tracks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[str] = []
+    monkeypatch.setattr(session_module, "notify", sent.append)
+    daemon = Daemon(Config(recordings_dir=tmp_path, data_dir=tmp_path))
+    daemon.session = fake_session(tmp_path, dead=("me", "them"))
+    daemon.stop.set()
+
+    daemon.on_event("tick", 0)
+
+    assert sent == []

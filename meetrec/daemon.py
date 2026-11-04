@@ -80,7 +80,9 @@ class Daemon:
         if self.session:
             self.session.note_apps(self.streams)
             self.session.note_port(self.port)
-            self.session.watch_recorder()
+            # systemd stops the whole cgroup at once: pw-record dying then is ours, not a fault.
+            if not self.stop.is_set():
+                self.session.watch_recorder()
             if self.life.state == State.recording:
                 self.session.watch_silence(now, self.cfg.silent_mic_s)
         if self.rescan_requested:
