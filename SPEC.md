@@ -141,7 +141,7 @@ queued → processing (worker) → done | error
 
 Worker запускается отдельным процессом под `nice -n 19`: `python -m meetrec.process <папка> [--from transcribe|transcript|summary]`.
 
-1. **LocalVQE**, только если в `meta.json.ports` хоть раз был `[Out] Speaker`. Дорожки обрезаются до общей длины, затем вызывается `localvqe_new(model)` и `localvqe_process_s16(ctx, me, them, n, out)` из `<data_dir>/liblocalvqe.so` через `ctypes`; результат пишется в `me.clean.wav`. Если LocalVQE упал, берётся исходный `me.wav`, а в `warnings` добавляется запись. В наушниках LocalVQE снижает громкость на 13 дБ и добавляет гул (→ 11), поэтому всегда его не включаем.
+1. **LocalVQE**, только если в `meta.json.ports` хоть раз был `[Out] Speaker`. Дорожки обрезаются до общей длины, затем вызывается `localvqe_new(model)` и `localvqe_process_s16(ctx, me, them, n, out)` из `<data_dir>/liblocalvqe.so` через `ctypes`; результат пишется в `me.clean.wav`. Перед `liblocalvqe.so` по пути загружаются `libggml-base.so.0` и `libggml.so.0`. Если LocalVQE упал, берётся исходный `me.wav`, а в `warnings` добавляется запись. В наушниках LocalVQE снижает громкость на 13 дБ и добавляет гул (→ 11), поэтому всегда его не включаем.
 2. **Расшифровка**: каждая дорожка (`me.clean.wav` или `me.wav`, затем `them.wav`) идёт в своём дочернем процессе:
    ```python
    tc.Model(gigaam_path, backend="vulkan").session().run(pcm_f32, language="ru", timestamps="token")
@@ -213,12 +213,12 @@ Worker запускается отдельным процессом под `nice
     - без флага — всё, чего не хватает;
     - `--transcript` — `transcript.md` из `*.tokens.tsv`, затем саммари;
     - `--all` — всё заново, с расшифровкой.
-  - Сама команда ничего не считает: пишет `queued` и нужный этап в `meta.json`, затем `systemctl --user kill -s USR1 meetrec`.
+  - Сама команда ничего не считает: пишет `queued` и нужный этап в `meta.json`, затем `systemctl --user kill --kill-whom=main -s USR1 meetrec` (без `--kill-whom=main` сигнал уйдёт всей группе и убьёт `pw-record`).
 - `meetrec setup` можно запускать повторно, готовые шаги пропускаются:
   1. Модели скачиваются в `<data_dir>/models/` с проверкой sha256. Если файл уже есть в `~/.cache/meetrec/models/`, он переносится.
      - `gigaam-v3-e2e-ctc-Q8_0.gguf` ← `https://huggingface.co/handy-computer/gigaam-v3-e2e-ctc-gguf/resolve/main/gigaam-v3-e2e-ctc-Q8_0.gguf`, sha256 `9ccce4750dc813a493d96ca15ee251712bedec15ac9a02fa3d2bd732f08ae5eb`
      - `localvqe-v1.4-aec-200K-f32.gguf` ← `https://huggingface.co/LocalAI-io/LocalVQE/resolve/main/localvqe-v1.4-aec-200K-f32.gguf`, sha256 `b6e43138588a83bfe903ab5e143b4020b91c1e1629f5a575ac5855ff0003c731`
-  2. LocalVQE: `git clone --recursive https://github.com/localai-org/LocalVQE` на коммите `7f61cd0`, затем `uvx cmake -S ggml -B ggml/build -DCMAKE_BUILD_TYPE=Release -DLOCALVQE_BUILD_SHARED=ON` и `uvx cmake --build ggml/build -j6 --target localvqe_shared`. В `<data_dir>/` копируются `ggml/build/bin/*.so`; `liblocalvqe.so` загружает ggml-бэкенды из своей папки.
+  2. LocalVQE: `git clone --recursive https://github.com/localai-org/LocalVQE` на коммите `7f61cd0`, затем `uvx cmake -S ggml -B ggml/build -DCMAKE_BUILD_TYPE=Release -DLOCALVQE_BUILD_SHARED=ON` и `uvx cmake --build ggml/build -j6 --target localvqe_shared`. Исходники и сборка лежат в `<data_dir>/src/LocalVQE` (сборку из `~/.cache/meetrec/src` `setup` переносит); библиотека — `ggml/build/bin/liblocalvqe.so`. Её RUNPATH указывает на папку сборки, поэтому `libggml-base.so.0` и `libggml.so.0` загружаются явно по пути с `RTLD_GLOBAL`.
   3. Юнит `~/.config/systemd/user/meetrec.service`, затем `systemctl --user daemon-reload` и `enable --now`:
      ```ini
      [Unit]

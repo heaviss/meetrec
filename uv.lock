@@ -1,0 +1,112 @@
+version = 1
+revision = 5
+requires-python = ">=3.14"
+
+[[package]]
+name = "colorama"
+version = "0.4.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697, upload-time = "2022-10-25T02:36:22.414Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
+]
+
+[[package]]
+name = "iniconfig"
+version = "2.3.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/01/e1/2069291243c926a2ff1cd706c7f3eeb9b62144bf60f77c9fb9ff2fb26bd3/iniconfig-2.3.1.tar.gz", hash = "sha256:67f4b9c50da0dedf52af349e7749a80a9057a5031199791b906c3bb3ae878960", size = 21209, upload-time = "2026-10-06T22:48:38.076Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/56/43/4ca9e49d27a1fcf6bece6f6aec0ea46bb9112489b93d4b688fb415457bdb/iniconfig-2.3.1-py3-none-any.whl", hash = "sha256:9121e2c1fdb355232495be3194c8dfe87ccc2d5dee45947b78e68f499790d7a7", size = 7552, upload-time = "2026-10-06T22:48:36.959Z" },
+]
+
+[[package]]
+name = "meetrec"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "transcribe-cpp" },
+    { name = "transcribe-cpp-native" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "transcribe-cpp", specifier = "==0.4.1" },
+    { name = "transcribe-cpp-native", specifier = "==0.4.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest" }]
+
+[[package]]
+name = "packaging"
+version = "26.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz", hash = "sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79", size = 313412, upload-time = "2026-08-04T18:15:28.737Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl", hash = "sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c", size = 129956, upload-time = "2026-08-04T18:15:27.159Z" },
+]
+
+[[package]]
+name = "pluggy"
+version = "1.7.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/db/7fc19e6f2dc92a966727031389fc2e08b558f0f25eb7403c1119ad4713cd/pluggy-1.7.0.tar.gz", hash = "sha256:d1eaa46ebb595891b860ab086b4d09c8588af65ebd4361b8e8f4bb8920b90ba8", size = 123304, upload-time = "2026-10-15T09:50:58.343Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/40/9e/2b38731e0fc536806f16490e1a12d7f0dc2a1235aa8cc07bcc75416a7daa/pluggy-1.7.0-py3-none-any.whl", hash = "sha256:7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec", size = 27082, upload-time = "2026-10-15T09:50:56.808Z" },
+]
+
+[[package]]
+name = "pygments"
+version = "2.21.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/49/2e/ced460408999b33da6b31b0021b0f37d329e202d4169aeb164493778f25b/pygments-2.21.0.tar.gz", hash = "sha256:610ca751c9bc2492b38eb9a38a7fbc93edbbb2d7182edaf34e66ae493dee5c8c", size = 5005329, upload-time = "2026-08-17T08:02:48.824Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/71/46/17f022dd3e953bf20a04a028a21ec746d942f8d2af30fa0f124fa0e6a684/pygments-2.21.0-py3-none-any.whl", hash = "sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9", size = 1250147, upload-time = "2026-08-17T08:02:44.912Z" },
+]
+
+[[package]]
+name = "pytest"
+version = "9.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "iniconfig" },
+    { name = "packaging" },
+    { name = "pluggy" },
+    { name = "pygments" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/79/42/bb4641652e58dedeac2ec51abc1f8cae4fee4ec63899a0999016229a0f2a/pytest-9.2.0.tar.gz", hash = "sha256:97c4f3b1f3c7414aa36465e09b8220f1d03627993bd51b1282e193753c80557b", size = 1797555, upload-time = "2026-10-27T21:30:20.728Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/51/39/1f5d8c8877a0fa327db959c19341d4be61660de1ab6b7391f9eb805bcd67/pytest-9.2.0-py3-none-any.whl", hash = "sha256:07acdcf88ec174f907dc01af70bf52d49b014bbab03faeeade31c96b18c2e588", size = 411776, upload-time = "2026-10-27T21:30:19.131Z" },
+]
+
+[[package]]
+name = "transcribe-cpp"
+version = "0.4.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "transcribe-cpp-native" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/86/e7/9edc70afb5068db1222453cce6e95e9fb6e871e6e34fbd535a6cebeee379/transcribe_cpp-0.4.1.tar.gz", hash = "sha256:4ffc427f559d5271b91e43f02bc73d392541719a8f605348a7f6a434bc33ba5a", size = 118461, upload-time = "2026-10-22T14:07:36.156Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/df/55b97bec42c43f44a3d1bf1d4bbaf32b8bb1f99f444f4d49bfe6ca4224f4/transcribe_cpp-0.4.1-py3-none-any.whl", hash = "sha256:a4bb6ffb8eac16875daec12a8b3b9598024a34d1c10507cff51f0c42400eab5d", size = 47639, upload-time = "2026-10-22T14:07:21.328Z" },
+]
+
+[[package]]
+name = "transcribe-cpp-native"
+version = "0.4.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2b/a3/051aebde5b8f6144f3b755b7e72a5676f2e16e04920ed1f8653df10efe28/transcribe_cpp_native-0.4.1.tar.gz", hash = "sha256:9cedd9319a87cb15036d24c48777e32e5e6b82b73ea021f57cc918c0ceac7f5c", size = 4543082, upload-time = "2026-10-22T14:07:37.563Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ac/bd/92e9e74cf4a59e118fd6b5c65c8f4f3b3c81b7c8030707a6a178764eea3c/transcribe_cpp_native-0.4.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:59fa4672e79cb5282b5d0c435506a22cd47bc6390a6bfee354ba46cae929a7c1", size = 2505988, upload-time = "2026-10-22T14:07:23.078Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/6b/98d884a92c57b722f8f720e996775425509a82db418a4157a941018f8d67/transcribe_cpp_native-0.4.1-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:06d8b7415724a96704630f2056f07d8dd7da4504adaa26edae2de9c97b261d72", size = 1631144, upload-time = "2026-10-22T14:07:24.881Z" },
+    { url = "https://files.pythonhosted.org/packages/85/26/f70a75ba3a7d6f950dc08e14a877bc811a4b54035d9e847b9ca629d09cde/transcribe_cpp_native-0.4.1-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:371e0fd638436123580401284c61610df847d094f5893f38339a6cccd1a16e51", size = 18349345, upload-time = "2026-10-22T14:07:26.767Z" },
+    { url = "https://files.pythonhosted.org/packages/89/90/745a4c6bf068a4aec400e32f81f6607475ca4dde8810f6c5c91534201cfa/transcribe_cpp_native-0.4.1-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:80011910fdc45adfeb78bf1a0e8813e9ad8be54b4f135b20e815388a11e78a50", size = 22805940, upload-time = "2026-10-22T14:07:31.161Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/d9/41cbb7195f0fbcf3fea8675da8e597b3b2fc5b553a754120823c62d2f54a/transcribe_cpp_native-0.4.1-py3-none-win_amd64.whl", hash = "sha256:ed0df2783c70c08eca406cbab5b79e2f0da3cac575cbc562b402b953fff508df", size = 18273433, upload-time = "2026-10-22T14:07:34.028Z" },
+]
