@@ -4,6 +4,7 @@ import subprocess
 import time
 from pathlib import Path
 from types import MappingProxyType
+from typing import Protocol
 
 from meetrec.audio import RATE, SAMPLE_BYTES, WAV_HEADER, recorded_s, repair_wav
 from meetrec.meeting import Meeting, now_iso
@@ -30,7 +31,20 @@ def stop_process(proc: subprocess.Popen[bytes]) -> None:
         proc.wait()
 
 
-class Recorder:
+class Recorder(Protocol):
+    """The two tracks of a meeting being written to its folder."""
+
+    def stop(self) -> list[dict[str, object]]:
+        """Stop both tracks; the gaps where a track lost audio."""
+
+    def dead_tracks(self) -> set[str]:
+        """Tracks whose writer has exited."""
+
+    def mic_silent(self, seconds: int) -> bool:
+        """The last `seconds` of track `me` hold only zeros."""
+
+
+class PwRecorder:
     def __init__(self, meeting: Meeting) -> None:
         self.meeting = meeting
         self.started = time.monotonic()

@@ -33,11 +33,12 @@ meetrec/
   meeting.py            # Meeting folder, meta.json, statuses and their transitions, crash recovery
   detect.py             # pactl snapshots → "is a call on" + active port
   pactl_events.py       # pactl subscribe → mic / sink events
-  record.py             # two pw-record processes, silence probe
-  session.py            # the meeting being recorded: apps, ports, silence, close
+  record.py             # Recorder protocol; two pw-record processes, silence probe
+  session.py            # the meeting being recorded: apps, ports, dead tracks, silence
   processing.py         # FIFO of closed meetings, the worker process, rescan
   lifecycle.py          # Lifecycle state machine: idle ⇄ recording ⇄ pause → close | discard
-  daemon.py             # event loop: snapshots, actions, processing, state.json
+  watcher.py            # pactl snapshots → Lifecycle → Session: starts, closes, discards meetings
+  daemon.py             # event loop: pactl snapshots, signals, processing, state.json
   process.py            # worker: stage plan → LocalVQE → GigaAM → tokens.tsv → transcript.md → summary.md
   asr.py                # GigaAM via transcribe-cpp, one child process per track
   echo.py               # LocalVQE via ctypes
@@ -130,7 +131,7 @@ pw-record --rate 16000 --channels 1 --format s16 \
 - Тишина микрофона: раз в 10 с читаются последние 10 с `me.wav` (файл растёт). Если пик равен 0 дольше `silent_mic_s`, отправляется одно `notify-send` за встречу и добавляется запись в `warnings`.
 - Каждую секунду демон проверяет, живы ли оба `pw-record`. Умерший процесс даёт одно `notify-send` и запись в `warnings`; встреча пишется дальше одной дорожкой.
 
-## 7. Демон (`daemon.py`) → 08
+## 7. Демон (`daemon.py`, `watcher.py`) → 08
 
 ```
 Ожидание ──звонок──▶ Запись ──микрофон свободен──▶ Пауза ──pause_s истёк──▶ Закрыта
@@ -152,7 +153,7 @@ queued → processing (worker) → done | error
   - `recording` или `pause` (демон упал посреди встречи): починить заголовки WAV (§8) и поставить `queued`; встреча короче `min_meeting_s` удаляется, как при обычном закрытии.
   - `processing`: снова `queued`.
   - Все `queued` по возрастанию `started_at` встают в очередь.
-- Остановка демона (`SIGTERM` от systemd): обработчик только ставит `threading.Event`, цикл выходит на следующем тике, `contextlib.closing` закрывает встречу. `pw-record` получает `SIGTERM` и закрывает WAV. Сессия отцепляется от демона до закрытия, поэтому остановка посреди закрытия не тронет уже закрытую встречу. Встреча переходит в `queued` и обработается при следующем старте; встреча короче `min_meeting_s` удаляется, как при обычном закрытии. Это же происходит при любом другом падении цикла демона. Если звонок ещё идёт, после старта начнётся новая встреча: перезапуск посреди звонка режет её на две папки — принято.
+- Остановка демона (`SIGTERM` от systemd): обработчик только ставит `threading.Event`, цикл выходит на следующем тике, `contextlib.closing` закрывает встречу. `pw-record` получает `SIGTERM` и закрывает WAV. Сессия отцепляется от `Watcher` до закрытия, поэтому остановка посреди закрытия не тронет уже закрытую встречу. Встреча переходит в `queued` и обработается при следующем старте; встреча короче `min_meeting_s` удаляется, как при обычном закрытии. Это же происходит при любом другом падении цикла демона. Если звонок ещё идёт, после старта начнётся новая встреча: перезапуск посреди звонка режет её на две папки — принято.
 
 ## 8. Починка WAV
 

@@ -1,19 +1,13 @@
 import shutil
-import time
-from datetime import datetime
-from pathlib import Path
+from collections.abc import Callable
 
 from meetrec.detect import Stream, app_of
 from meetrec.meeting import Meeting, now_iso
-from meetrec.notify import notify
 from meetrec.record import Recorder
-from meetrec.transcript import MS_PER_S, clock
 
 SILENCE_CHECK_S = 10
 
-
-def app_label(app: dict[str, str | None]) -> str:
-    return app["binary"] or app["name"] or "?"
+Notify = Callable[[str], None]
 
 
 def same_port(seen: dict[str, str | None], port: dict[str, str | None]) -> bool:
@@ -21,32 +15,20 @@ def same_port(seen: dict[str, str | None], port: dict[str, str | None]) -> bool:
 
 
 class Session:
-    """One meeting being recorded: its folder, the two pw-record processes and what they saw."""
+    """One meeting being recorded: its folder, its recorder and what they saw."""
 
-    def __init__(self, recordings_dir: Path, streams: list[Stream]) -> None:
-        self.meeting = Meeting.create(recordings_dir, datetime.now().astimezone())
-        self.recorder = Recorder(self.meeting)
+    def __init__(self, meeting: Meeting, recorder: Recorder, notify: Notify, now: float) -> None:
+        self.meeting = meeting
+        self.recorder = recorder
+        self.notify = notify
         self.silent_s = 0
         self.silence_warned = False
         self.dead_tracks: set[str] = set()
-        self.next_silence_check = time.monotonic() + SILENCE_CHECK_S
-        apps = ", ".join(sorted({app_label(app_of(stream)) for stream in streams}))
-        notify(f"Запись встречи: {apps}")
-
-    def pause(self) -> None:
-        self.meeting.pause()
-
-    def resume(self) -> None:
-        self.meeting.resume()
+        self.next_silence_check = now + SILENCE_CHECK_S
 
     def close(self) -> Meeting:
         self.meeting.close(self.recorder.stop())
         return self.meeting
-
-    def close_and_report(self) -> Meeting:
-        meeting = self.close()
-        notify(f"Встреча записана: {clock(meeting.duration_s * MS_PER_S)}")
-        return meeting
 
     def discard(self) -> None:
         self.recorder.stop()
@@ -68,7 +50,7 @@ class Session:
     def watch_recorder(self) -> None:
         for track in self.recorder.dead_tracks() - self.dead_tracks:
             self.dead_tracks.add(track)
-            notify(f"Запись {track} оборвалась — встреча пишется не полностью")
+            self.notify(f"Запись {track} оборвалась — встреча пишется не полностью")
             self.meeting.append("warnings", f"pw-record {track} exited at {now_iso()}")
 
     def watch_silence(self, now: float, threshold_s: int) -> None:
@@ -79,5 +61,5 @@ class Session:
         self.silent_s = self.silent_s + SILENCE_CHECK_S if silent else 0
         if self.silent_s >= max(threshold_s, SILENCE_CHECK_S):
             self.silence_warned = True
-            notify(f"Микрофон молчит {self.silent_s} с — проверьте устройство")
+            self.notify(f"Микрофон молчит {self.silent_s} с — проверьте устройство")
             self.meeting.append("warnings", f"mic silent {self.silent_s} s at {now_iso()}")
