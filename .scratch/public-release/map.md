@@ -26,6 +26,7 @@ label: wayfinder:map
 ## Decisions so far
 
 - [Допускают ли зависимости лицензию MIT](01-dependency-licenses.md): да; MIT и Apache-2.0, всё скачивается у пользователя; README называет сторонние компоненты и их лицензии.
+- [Как ставить LocalVQE по желанию](02-localvqe-optional.md): `setup` собирает LocalVQE только при `echo_cancel = true`; без библиотеки демон уведомляет при старте и пишет сырой `me.wav`; `--parallel` вместо `-j6`, `OLD_CACHE` удалить.
 
 ## Not yet specified
 
