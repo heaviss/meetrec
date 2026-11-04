@@ -4,11 +4,11 @@ import threading
 import time
 from contextlib import closing
 
-from meetrec import detect, pactl_events
 from meetrec.config import Config
 from meetrec.lifecycle import Action, State
 from meetrec.meeting import write_json
 from meetrec.notify import notify
+from meetrec.pactl import Pactl, Snapshot
 from meetrec.processing import Processing
 from meetrec.watcher import Change, Watcher
 
@@ -18,10 +18,8 @@ log = logging.getLogger(__name__)
 class Daemon:
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
-        self.events = pactl_events.event_queue()
+        self.pactl = Pactl(cfg.app_denylist)
         self.watcher = Watcher(cfg)
-        self.streams: list[detect.Stream] = []
-        self.port: dict[str, str | None] | None = None
         self.processing = Processing(cfg.min_meeting_s)
         self.rescan_requested = True
         self.last_state: dict[str, object] = {}
@@ -30,15 +28,13 @@ class Daemon:
     def run(self) -> None:
         self.install_signals()
         self.cfg.recordings_dir.mkdir(parents=True, exist_ok=True)
-        threading.Thread(target=pactl_events.subscribe, args=(self.events, self.stop), daemon=True).start()
-        self.events.put("mic")
-        self.events.put("sink")
+        self.pactl.start(self.stop)
         log.info("meetrec daemon started, pause %ss", self.cfg.pause_s)
         if self.cfg.echo_cancel and not (self.cfg.localvqe_lib.exists() and self.cfg.localvqe_model.exists()):
             notify("эхо не подавляется: запустите meetrec setup")
         with closing(self):
             while not self.stop.is_set():
-                self.on_event(pactl_events.next_event(self.events), time.monotonic())
+                self.on_snapshot(self.pactl.next(), time.monotonic())
 
     def install_signals(self) -> None:
         signal.signal(signal.SIGUSR1, self.request_rescan)
@@ -49,20 +45,10 @@ class Daemon:
         # Only a flag: queue.Queue is not reentrant, so a signal handler must not touch it.
         self.rescan_requested = True
 
-    def refresh(self, event: str) -> None:
-        try:
-            if event == "mic":
-                self.streams = detect.mic_streams(self.cfg.app_denylist)
-            elif event == "sink":
-                self.port = detect.default_port()
-        except detect.SNAPSHOT_ERRORS:
-            log.exception("pactl snapshot failed, keeping the previous one")
-
-    def on_event(self, event: str, now: float) -> None:
-        self.refresh(event)
+    def on_snapshot(self, snapshot: Snapshot, now: float) -> None:
         # systemd stops the whole cgroup at once: pw-record dying then is ours, not a fault; close() takes over.
         if not self.stop.is_set():
-            self.act(self.watcher.update(self.streams, self.port, now))
+            self.act(self.watcher.update(*snapshot, now))
         recording = self.watcher.meeting
         if self.rescan_requested:
             self.rescan_requested = False

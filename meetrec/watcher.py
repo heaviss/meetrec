@@ -4,9 +4,9 @@ from datetime import datetime
 
 from meetrec import notify as notify_module
 from meetrec.config import Config
-from meetrec.detect import Stream, app_of
 from meetrec.lifecycle import Action, Lifecycle, State
 from meetrec.meeting import Meeting
+from meetrec.pactl import Port, Stream, app_of
 from meetrec.record import PwRecorder, Recorder
 from meetrec.session import Notify, Session
 from meetrec.transcript import MS_PER_S, clock
@@ -14,7 +14,6 @@ from meetrec.transcript import MS_PER_S, clock
 log = logging.getLogger(__name__)
 
 Change = tuple[Action, Meeting]
-Port = dict[str, str | None]
 
 
 def app_label(app: dict[str, str | None]) -> str:

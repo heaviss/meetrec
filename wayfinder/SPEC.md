@@ -31,8 +31,7 @@ meetrec/
   cli.py                # meetrec run | status | redo | setup
   config.py             # defaults + ~/.config/meetrec/config.toml (tomllib)
   meeting.py            # Meeting folder, meta.json, statuses and their transitions, crash recovery
-  detect.py             # pactl snapshots → "is a call on" + active port
-  pactl_events.py       # pactl subscribe → mic / sink events
+  pactl.py              # pactl subscribe → snapshots: foreign mic streams + active port
   record.py             # Recorder protocol; two pw-record processes, silence probe
   session.py            # the meeting being recorded: apps, ports, dead tracks, silence
   processing.py         # FIFO of closed meetings, the worker process, rescan
@@ -106,7 +105,7 @@ tests/                  # one small test per non-trivial logic, see §11
 
 `status` — единственный источник правды о состоянии. Запись идёт атомарно: во временный файл, затем `os.replace`.
 
-## 5. Как заметить звонок (`detect.py`) → 01
+## 5. Как заметить звонок (`pactl.py`) → 01
 
 1. Подпроцесс `LC_ALL=C pactl subscribe`. Учитываются только строки `^Event '(new|remove)' on source-output #\d+$` и `^Event 'change' on (sink|server) #\S+$`; `sink-input` (громкость любого потока) — нет. `LC_ALL=C` обязателен: без него `pactl` выводит события по-русски, а `-f json` падает на не-ASCII.
 2. На каждое такое событие, а также при старте демона снимаются `LC_ALL=C pactl -f json list source-outputs` и `… list sources`. Поток считается **чужим микрофонным**, если:
@@ -115,7 +114,7 @@ tests/                  # one small test per non-trivial logic, see §11
    - `application.id` не входит в `app_denylist`.
 3. «Звонок идёт» ⇔ есть хотя бы один чужой микрофонный поток. Бинарь и имя приложения пишутся в `meta.json.apps`.
 4. Если `pactl subscribe` завершился (перезапуск pipewire-pulse), подписка перезапускается, а состояние берётся из нового снимка.
-5. Активный порт: на события `change` по `sink` и `server` снимается `pactl -f json list sinks`, берётся `active_port` default sink. Если порт изменился, в `meta.json.ports` добавляется запись. На этой машине порты называются `[Out] Speaker` и `[Out] Headphones`.
+5. Активный порт: на события `change` по `sink` и `server` снимаются `pactl -f json info` (`default_sink_name`) и `pactl -f json list sinks`, берётся `active_port` default sink. Если снимок не удался, остаётся прежний. Если порт изменился, в `meta.json.ports` добавляется запись. На этой машине порты называются `[Out] Speaker` и `[Out] Headphones`.
 
 ## 6. Запись (`record.py`) → 03, 10
 
@@ -243,13 +242,15 @@ Worker запускается отдельным процессом под `nice
 
 ## 11. Проверки
 
-На каждую нетривиальную логику — один маленький тест в `tests/`, на pytest без фикстур:
+На каждую нетривиальную логику — маленький тест в `tests/` через interface модуля. Общая фикстура одна: `meeting` в `conftest.py`, свежая встреча во временной папке.
 
-- `detect`: из JSON-снимка `source-outputs`/`sources` выделяются чужие микрофонные потоки. Monitor, `meetrec` и pavucontrol отсекаются.
-- `daemon`: таймлайн событий (старт, освобождение, возврат внутри паузы, истечение паузы, короткая встреча) переводится в нужные действия `Lifecycle`. Время инжектится, без `sleep`.
-- `process`: план этапов для `missing` / `transcript` / `all` при разных наборах готовых файлов.
-- `processing`: встреча, оставшаяся в `recording` после падения, уходит в `queued` с длительностью по `me.wav`; упавшая в Паузе сохраняет момент освобождения; worker, умерший до начала работы, даёт `error`; битый `meta.json` пропускается.
-- `meeting`: заголовок WAV, обрезанный как после `SIGKILL`, чинится, и `wave.open` читает верное число кадров.
+- `pactl`: чужие микрофонные потоки (monitor, `meetrec` и pavucontrol отсекаются), классификация строк `pactl subscribe`; через `Pactl.notice`/`next` с поддельным `pactl` — событие микрофона обновляет только потоки, событие sink — порт, тик ничего не спрашивает, упавший снимок оставляет прежний.
+- `lifecycle`: таймлайн событий переводится в нужные действия. Время инжектится, без `sleep`.
+- `watcher`: сценарии с поддельным recorder и `notify` — запись, пауза, возврат, закрытие; короткая встреча удаляется; приложения и порт пишутся в `meta.json`; мёртвый трек и молчащий микрофон дают по одному уведомлению; остановка демона закрывает или удаляет встречу и не сообщает об убитых ею `pw-record`.
+- `process`: сценарии с поддельными `Engines` — `missing` / `transcript` / `all` запускают только свои этапы; пустой трек; откат с LocalVQE на сырой `me.wav`; нет `claude` или он упал; упавшая расшифровка даёт `error` и сохраняет `redo`.
+- `meeting`: переходы статусов, `redo` не трогает активную встречу, `outcome`; восстановление после падения — `recording` уходит в `queued` с длительностью по `me.wav`, упавшая в Паузе сохраняет момент освобождения, короткая удаляется; битый `meta.json` пропускается.
+- `processing`: worker, умерший до начала работы, даёт `error`; `SIGSTOP` не трогает этап `summary`; бюджет считает только время работы.
+- `audio`: заголовок WAV, обрезанный как после `SIGKILL`, чинится, и `wave.open` читает верное число кадров.
 - `transcript`: границы фраз, формат строк и чередование `me`/`them` — на синтетических токенах. Фрагменты настоящих встреч в репозиторий не кладём: это чужая речь.
 
 Ручная приёмка — первый живой звонок:

@@ -4,10 +4,10 @@ import pytest
 
 from meetrec.config import Config
 from meetrec.daemon import Daemon
-from meetrec.detect import Stream
 from meetrec.lifecycle import Action
 from meetrec.meeting import Meeting, Status
-from meetrec.watcher import Port, Watcher
+from meetrec.pactl import Port, Snapshot, Stream
+from meetrec.watcher import Watcher
 
 SILENT_MIC_S = 60
 
@@ -115,12 +115,11 @@ def test_stopping_daemon_ignores_killed_tracks(tmp_path: Path) -> None:
     rig = Rig(tmp_path)
     daemon = Daemon(Config(recordings_dir=tmp_path, data_dir=tmp_path))
     daemon.watcher = rig.watcher
-    daemon.streams = rig.streams
-    daemon.on_event("tick", 0)
+    daemon.on_snapshot(Snapshot(rig.streams, rig.port), 0)
     rig.sent.clear()
     daemon.stop.set()
     rig.recorder.dead.update({"me", "them"})
 
-    daemon.on_event("tick", 1)
+    daemon.on_snapshot(Snapshot(rig.streams, rig.port), 1)
 
     assert rig.sent == []

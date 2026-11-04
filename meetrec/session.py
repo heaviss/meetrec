@@ -1,8 +1,8 @@
 import shutil
 from collections.abc import Callable
 
-from meetrec.detect import Stream, app_of
 from meetrec.meeting import Meeting, now_iso
+from meetrec.pactl import Stream, app_of
 from meetrec.record import Recorder
 
 SILENCE_CHECK_S = 10
