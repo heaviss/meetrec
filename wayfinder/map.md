@@ -24,6 +24,8 @@ label: wayfinder:map
 
 ## Decisions so far
 
+Сводная спецификация для реализации: [SPEC.md](../SPEC.md).
+
 - [Как заметить, что чужое приложение открыло микрофон](01-call-detection.md): `LC_ALL=C pactl subscribe` на `source-output` + снимок `pactl -f json list source-outputs`; звонок — не-monitor поток не от `meetrec`; свои `pw-record` метятся `application.name=meetrec`. Живым звонком не проверено.
 - [Как писать две дорожки синхронно](03-two-track-capture.md): два `pw-record --rate 16000 --channels 1 --format s16` без `--target` (следуют за default-устройством), `them` с `stream.capture.sink=true`; сдвиг ~21 мс, дрейфа нет; при перелинковке BT теряются сэмплы; после SIGKILL чинить заголовок WAV.
 - [Как transcribe.cpp расшифровывает русский на CPU](02-transcribe-cpp.md): `handy-computer/transcribe.cpp` v0.4.1, сборка `cmake` или колесо `transcribe-cpp`; модель `gigaam-v3-e2e-ctc-Q8_0.gguf` (272 МБ, с пунктуацией); длинное аудио режет сам; метки только по токенам (40 мс), сегменты собираем сами; оценка ~3–4 мин CPU на час дорожки (не замер); LocalVQE — отдельно, референс `them.wav`.
