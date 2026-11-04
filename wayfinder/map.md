@@ -24,6 +24,8 @@ label: wayfinder:map
 
 ## Decisions so far
 
+- [Как заметить, что чужое приложение открыло микрофон](01-call-detection.md): `LC_ALL=C pactl subscribe` на `source-output` + снимок `pactl -f json list source-outputs`; звонок — не-monitor поток не от `meetrec`; свои `pw-record` метятся `application.name=meetrec`. Живым звонком не проверено.
+
 ## Not yet specified
 
 - Очередь расшифровки: встречи подряд, расшифровка во время следующего звонка, нагрузка на CPU.
