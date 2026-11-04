@@ -29,6 +29,7 @@ label: wayfinder:map
 - [Как ставить LocalVQE по желанию](02-localvqe-optional.md): `setup` собирает LocalVQE только при `echo_cancel = true`; без библиотеки демон уведомляет при старте и пишет сырой `me.wav`; `--parallel` вместо `-j6`, `OLD_CACHE` удалить.
 - [Составить список замен для истории](03-history-scrub.md): `.git/public-release/replacements.txt` и `mailmap` вне дерева; пробный `filter-repo` на клоне чист; описание машины остаётся.
 - [Какой моделью распознавать английскую речь](05-english-models.md): `parakeet-tdt-0.6b-v2` (CC-BY-4.0), метки токенов как у GigaAM, на ~10 % медленнее; в `asr.py` ведущий пробел токена → `▁`.
+- [Как meetrec выбирает язык встречи](06-language-choice.md): `language` в конфиге (по умолчанию `ru`), `redo --language` для одной встречи; смешанные встречи не поддерживаются; `setup` качает модель одного языка; саммари на языке встречи.
 
 ## Not yet specified
 

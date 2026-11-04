@@ -1,7 +1,7 @@
 ---
 type: grilling
 status: open
-assignee:
+assignee: claude
 blocked_by: [1, 2, 6]
 ---
 
