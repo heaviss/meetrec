@@ -34,16 +34,13 @@ class Session:
         notify(f"Запись встречи: {apps}")
 
     def pause(self) -> None:
-        """stopped_at is the release moment, kept on disk so a crash during the pause keeps it."""
-        self.meeting.update(status="pause", stopped_at=now_iso())
+        self.meeting.pause()
 
     def resume(self) -> None:
-        self.meeting.update(status="recording", stopped_at=None)
+        self.meeting.resume()
 
     def close(self) -> Meeting:
-        """The meeting ends when the microphone was released, not when the pause ran out."""
-        gaps = self.recorder.stop()
-        self.meeting.update(status="queued", stopped_at=self.meeting.meta["stopped_at"] or now_iso(), gaps=gaps)
+        self.meeting.close(self.recorder.stop())
         return self.meeting
 
     def close_and_report(self) -> Meeting:

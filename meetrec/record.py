@@ -5,8 +5,8 @@ import time
 from pathlib import Path
 from types import MappingProxyType
 
-from meetrec.audio import RATE, SAMPLE_BYTES
-from meetrec.meeting import WAV_HEADER, now_iso, repair_wav
+from meetrec.audio import RATE, SAMPLE_BYTES, WAV_HEADER, recorded_s, repair_wav
+from meetrec.meeting import now_iso
 
 log = logging.getLogger(__name__)
 
@@ -28,10 +28,6 @@ def stop_process(proc: subprocess.Popen[bytes]) -> None:
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
-
-
-def recorded_s(path: Path) -> float:
-    return (path.stat().st_size - WAV_HEADER) / SAMPLE_BYTES / RATE
 
 
 class Recorder:

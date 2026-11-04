@@ -9,7 +9,7 @@ from typing import Any
 from meetrec.config import ASR_MODELS, Config, load_config
 from meetrec.daemon import Daemon
 from meetrec.install import setup
-from meetrec.meeting import ACTIVE, Meeting, list_meetings
+from meetrec.meeting import Meeting, Outcome, list_meetings
 
 
 def daemon_lines(state: dict[str, Any] | None) -> list[str]:
@@ -23,11 +23,11 @@ def daemon_lines(state: dict[str, Any] | None) -> list[str]:
 
 
 def attention_line(meeting: Meeting) -> str | None:
-    if meeting.status == "error":
-        error = meeting.meta["error"]
-        return f"error: {meeting.path} — {error}"
-    if meeting.status == "done" and not (meeting.meta["summary_done"] or meeting.meta.get("summary_skipped")):
-        return f"no summary: {meeting.path}"
+    match meeting.outcome():
+        case Outcome.error:
+            return f"error: {meeting.path} — {meeting.error}"
+        case Outcome.transcript_only:
+            return f"no summary: {meeting.path}"
     return None
 
 
@@ -48,12 +48,10 @@ def redo(folder: Path, stage: str, language: str | None) -> None:
     folder = folder.expanduser().resolve()
     if not (folder / "meta.json").exists():
         sys.exit(f"{folder} is not a meeting folder")
-    meeting = Meeting.load(folder)
-    if meeting.status in ACTIVE:
-        sys.exit(f"{folder.name} is {meeting.status}, leaving it alone")
-    if language:
-        meeting.update(language=language)
-    meeting.update(status="queued", redo=stage)
+    try:
+        Meeting.load(folder).queue(stage, language)
+    except ValueError as error:
+        sys.exit(str(error))
     # --kill-whom=main: the default signals the whole cgroup, and SIGUSR1 would kill pw-record.
     kill = ["systemctl", "--user", "kill", "--kill-whom=main", "-s", "USR1", "meetrec"]
     if subprocess.run(kill, check=False).returncode:

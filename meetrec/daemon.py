@@ -7,7 +7,7 @@ from contextlib import closing
 from meetrec import detect, pactl_events
 from meetrec.config import Config
 from meetrec.lifecycle import Action, Lifecycle, State
-from meetrec.meeting import write_json
+from meetrec.meeting import Status, write_json
 from meetrec.notify import notify
 from meetrec.processing import Processing
 from meetrec.session import Session
@@ -23,7 +23,7 @@ def active(session: Session | None) -> Session:
 
 def stop_session(session: Session, length_s: float, min_meeting_s: float) -> None:
     """The daemon is stopping mid-meeting: keep the meeting by the same rule as a normal close."""
-    if session.meeting.status == "queued":
+    if session.meeting.status == Status.queued:
         return
     if length_s < min_meeting_s:
         log.info("stopping, discarding the short meeting in progress")

@@ -30,18 +30,18 @@ setup.cfg               # flake8/wemake config
 meetrec/
   cli.py                # meetrec run | status | redo | setup
   config.py             # defaults + ~/.config/meetrec/config.toml (tomllib)
-  meeting.py            # Meeting folder, meta.json, statuses, WAV header repair
+  meeting.py            # Meeting folder, meta.json, statuses and their transitions, crash recovery
   detect.py             # pactl snapshots → "is a call on" + active port
   pactl_events.py       # pactl subscribe → mic / sink events
   record.py             # two pw-record processes, silence probe
   session.py            # the meeting being recorded: apps, ports, silence, close
-  processing.py         # FIFO of closed meetings, the worker process, crash recovery
+  processing.py         # FIFO of closed meetings, the worker process, rescan
   lifecycle.py          # Lifecycle state machine: idle ⇄ recording ⇄ pause → close | discard
   daemon.py             # event loop: snapshots, actions, processing, state.json
   process.py            # worker: stage plan → LocalVQE → GigaAM → tokens.tsv → transcript.md → summary.md
   asr.py                # GigaAM via transcribe-cpp, one child process per track
   echo.py               # LocalVQE via ctypes
-  audio.py              # 16 kHz mono s16 WAV I/O
+  audio.py              # 16 kHz mono s16 WAV I/O, WAV header repair
   transcript.py         # tokens → phrase lines → transcript.md
   summary.py            # prompt + claude -p
   install.py            # meetrec setup

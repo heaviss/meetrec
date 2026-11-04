@@ -8,10 +8,10 @@ from pathlib import Path
 
 from meetrec import transcript
 from meetrec.asr import parse_backend, require_model, transcribe, transcribe_track
+from meetrec.audio import recorded_s
 from meetrec.config import Config, load_config
 from meetrec.echo import cancel_echo, played_on_speakers
 from meetrec.meeting import Meeting
-from meetrec.record import recorded_s
 from meetrec.summary import claude_available, summarize
 
 log = logging.getLogger(__name__)
@@ -57,13 +57,13 @@ def transcribe_or_skip(meeting: Meeting, wav: Path, tsv: Path, language: str) ->
 def write_transcript(meeting: Meeting) -> None:
     tracks = [transcript.phrases(transcript.read_tokens(meeting.path / f"{name}.tokens.tsv"), name) for name in TRACKS]
     (meeting.path / "transcript.md").write_text(transcript.render(meeting.started_at, meeting.duration_s, *tracks))
-    meeting.update(summary_done=False)
+    meeting.transcript_written()
 
 
 def write_summary(meeting: Meeting, cfg: Config) -> None:
     if not claude_available():
         log.info("no claude in PATH, skipping the summary of %s", meeting.path)
-        meeting.update(summary_skipped=True)
+        meeting.summary_skipped()
         return
     try:
         summary = summarize((meeting.path / "transcript.md").read_text(), cfg, meeting.meta["language"])
@@ -71,38 +71,35 @@ def write_summary(meeting: Meeting, cfg: Config) -> None:
         log.exception("summary failed for %s", meeting.path)
         return
     (meeting.path / "summary.md").write_text(summary)
-    meeting.update(summary_done=True, summary_skipped=False)
+    meeting.summary_written()
 
 
-def run_stages(meeting: Meeting, redo: str, cfg: Config) -> None:
+def run_stages(meeting: Meeting, cfg: Config) -> None:
     folder = meeting.path
     have_tokens = all((folder / f"{name}.tokens.tsv").exists() for name in TRACKS)
-    steps = plan(redo, have_tokens, (folder / "transcript.md").exists(), meeting.meta["summary_done"])
+    steps = plan(meeting.redo, have_tokens, (folder / "transcript.md").exists(), meeting.summary_done)
     if steps.transcribe:
         language = meeting.meta["language"]
         require_model(cfg, language)
-        meeting.update(stage="transcribe")
+        meeting.enter("transcribe")
         transcribe_or_skip(meeting, me_track(meeting, cfg), folder / "me.tokens.tsv", language)
         transcribe_or_skip(meeting, folder / "them.wav", folder / "them.tokens.tsv", language)
     if steps.transcript:
         write_transcript(meeting)
     if steps.summary:
-        meeting.update(stage="summary")
+        meeting.enter("summary")
         write_summary(meeting, cfg)
 
 
 def process(folder: Path, cfg: Config) -> None:
     meeting = Meeting.load(folder)
-    redo = meeting.meta.get("redo") or "missing"
-    # Meetings from before the language setting, and new ones, take the configured language once.
-    meeting.update(status="processing", error=None, stage=None, language=meeting.meta.get("language") or cfg.language)
+    meeting.begin(cfg.language)
     try:
-        run_stages(meeting, redo, cfg)
+        run_stages(meeting, cfg)
     except Exception as error:
-        meeting.update(status="error", stage=None, error=f"{type(error).__name__}: {error}")
+        meeting.fail(f"{type(error).__name__}: {error}")
         raise
-    # redo is cleared only now: a worker that dies mid-way retries the same stage.
-    meeting.update(status="done", stage=None, redo=None)
+    meeting.finish()
 
 
 def main() -> None:

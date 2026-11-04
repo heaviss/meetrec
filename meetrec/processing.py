@@ -1,54 +1,27 @@
 import logging
 import os
-import shutil
 import signal
 import subprocess
 import sys
 from collections import deque
-from datetime import timedelta
 from pathlib import Path
 
-from meetrec.meeting import Meeting, list_meetings, now_iso, repair_wav
+from meetrec.meeting import Meeting, Outcome, list_meetings
 from meetrec.notify import notify
-from meetrec.record import recorded_s
 
 log = logging.getLogger(__name__)
 
 NICE = ("nice", "-n", "19")
 BASE_BUDGET_S = 1800
-QUEUED = "queued"
-UNFINISHED = frozenset((QUEUED, "processing"))
-
-
-def recovered_stop(meeting: Meeting) -> str:
-    """When the daemon died mid-meeting, the meeting ended where its recording ends."""
-    me_wav = meeting.path / "me.wav"
-    if not me_wav.exists():
-        return now_iso()
-    stopped = meeting.started_at + timedelta(seconds=recorded_s(me_wav))
-    return stopped.isoformat(timespec="seconds")
-
-
-def recover(meeting: Meeting, min_meeting_s: float) -> None:
-    """Bring a meeting the daemon lost track of (crash, restart) back to the queue, or drop it if short."""
-    if meeting.status in {"recording", "pause"}:
-        for wav in meeting.path.glob("*.wav"):
-            repair_wav(wav)
-        meeting.update(status=QUEUED, stopped_at=meeting.meta["stopped_at"] or recovered_stop(meeting))
-        if meeting.duration_s < min_meeting_s:
-            log.info("discarding short recovered meeting %s", meeting.path.name)
-            shutil.rmtree(meeting.path)
-    elif meeting.status == "processing":
-        meeting.update(status=QUEUED)
 
 
 def outcome(meeting: Meeting) -> str:
     folder = meeting.path
-    if meeting.status == "error":
-        error = meeting.meta["error"]
-        return f"Ошибка обработки {folder.name}: {error}"
-    if meeting.meta["summary_done"]:
-        return f"Саммари готово: {folder}/summary.md"
+    match meeting.outcome():
+        case Outcome.error:
+            return f"Ошибка обработки {folder.name}: {meeting.error}"
+        case Outcome.summary:
+            return f"Саммари готово: {folder}/summary.md"
     return f"Транскрипт готов, саммари не сделано: {folder}/transcript.md"
 
 
@@ -73,8 +46,7 @@ class Processing:
         for meeting in list_meetings(recordings_dir):
             if meeting.path in {recording, self.current}:
                 continue
-            recover(meeting, self.min_meeting_s)
-            if meeting.status == QUEUED and meeting.path.exists():
+            if meeting.recover(self.min_meeting_s):
                 self.enqueue(meeting.path)
 
     def pump(self, now: float, may_start: bool) -> None:
@@ -118,7 +90,7 @@ class Processing:
         The summary stage only waits on the network, and its claude timeout would keep
         running while stopped, so a worker in that stage is left alone.
         """
-        if self.current is None or Meeting.load(self.current).meta.get("stage") == "summary":
+        if self.current is None or Meeting.load(self.current).stage == "summary":
             return
         self.signal_worker(signal.SIGSTOP)
         self.suspended = True
@@ -135,6 +107,6 @@ class Processing:
         self.suspended = False
         if meeting is None:
             return
-        if returncode and meeting.status in UNFINISHED:
-            meeting.update(status="error", error=f"worker exited with {returncode}")
+        if returncode:
+            meeting.worker_died(returncode)
         notify(outcome(meeting))
