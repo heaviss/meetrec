@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-meetrec: a Linux daemon that notices a call, records `me`/`them` tracks, transcribes them locally with GigaAM and summarizes with `claude -p`. Users read [README.md](README.md); what to build and why lives in [SPEC.md](wayfinder/SPEC.md), the words in [GLOSSARY.md](GLOSSARY.md).
+meetrec: a Linux daemon that notices a call, records `me`/`them` tracks, transcribes them locally (GigaAM for Russian, Parakeet for English) and summarizes with `claude -p`. Users read [README.md](README.md); what to build and why lives in [SPEC.md](wayfinder/SPEC.md), the words in [GLOSSARY.md](GLOSSARY.md).
 
 ## Where decisions live
 
@@ -29,9 +29,9 @@ Fix wemake findings in the code. Raise a threshold in `setup.cfg` only with a co
 - `systemctl --user kill` signals the whole cgroup by default; signal the daemon only with `--kill-whom=main`, or `pw-record` dies mid-meeting.
 - The LocalVQE build bakes its build dir into RUNPATH, so `echo.py` loads `libggml*.so.0` by path.
 
-## Commits
+## Install from a clone
 
-Commit email is `9004182+heaviss@users.noreply.github.com` (set in this repo's git config). Push to `origin` (GitHub) after the user approves.
+`uv tool install --editable . --python 3.14`, then `meetrec setup`. A code change takes effect after `systemctl --user restart meetrec`.
 
 ## Agent skills
 

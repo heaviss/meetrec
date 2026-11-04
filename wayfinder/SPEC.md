@@ -1,6 +1,6 @@
 # meetrec — спецификация первой версии
 
-Демон для Linux. Сам замечает звонок, пишет две дорожки: `me` (микрофон) и `them` (системный вывод). Локально расшифровывает их GigaAM-v3 и кладёт в папку встречи `transcript.md` и `summary.md`. Термины — в [GLOSSARY.md](../GLOSSARY.md). Почему решено именно так, рассказывают тикеты [карты](map.md); здесь только *что* строить. Ссылка вида «→ 08» ведёт на тикет `08-*.md` рядом.
+Демон для Linux. Сам замечает звонок, пишет две дорожки: `me` (микрофон) и `them` (системный вывод). Локально расшифровывает их (русский — GigaAM-v3, английский — Parakeet TDT 0.6B v2) и кладёт в папку встречи `transcript.md` и `summary.md`. Термины — в [GLOSSARY.md](../GLOSSARY.md). Почему решено именно так, рассказывают тикеты [карты](map.md); здесь только *что* строить. Ссылка вида «→ 08» ведёт на тикет `08-*.md` рядом.
 
 Машина: Ryzen 5 5600H, iGPU Vega (RADV), без NVIDIA. PipeWire 1.0.5 + WirePlumber 0.4.17, Cinnamon/X11. Python 3.14 через `uv`.
 
@@ -9,14 +9,14 @@
 Входит:
 - автостарт и автостоп по микрофону;
 - две дорожки;
-- расшифровка только на русском;
+- расшифровка на русском или английском, один язык на встречу;
 - подавление эха только при динамиках и только с `echo_cancel = true`;
 - транскрипт и саммари через `claude -p`;
 - `status` / `redo` / `setup`.
 
 Не входит:
 - разметка спикеров внутри `them`;
-- другие языки;
+- другие языки и смешанные встречи;
 - локальная LLM;
 - захват звука отдельного приложения;
 - ручной старт и стоп записи;
@@ -62,8 +62,9 @@ tests/                  # one small test per non-trivial logic, see §11
 | `min_meeting_s` | `120` | 08 |
 | `silent_mic_s` | `60` | 10 |
 | `echo_cancel` | `false`: в наушниках гнездо не всегда распознаётся, и PipeWire показывает `[Out] Speaker` | 11 |
-| `user_name` | `Имя Фамилия` | 07 |
-| `glossary_repo` | `~/src/work-repo` | 07 |
+| `language` | `ru`: язык речи на встречах, `ru` или `en`. Выбирает модель, язык саммари и модель, которую качает `setup`. Смешанные встречи не поддерживаются, язык сам не определяется | [public-release 06](../.scratch/public-release/06-language-choice.md) |
+| `user_name` | полное имя из поля GECOS (`pwd`, до первой запятой), если пусто — логин | 07 |
+| `glossary_repo` | нет: без него саммари идёт без словаря | 07 |
 | `app_denylist` | `["org.PulseAudio.pavucontrol"]` (по `application.id`) | 01 |
 | `data_dir` | `~/.local/share/meetrec` | 14 |
 
@@ -90,12 +91,16 @@ tests/                  # one small test per non-trivial logic, see §11
   "ports": [{"at": "…", "sink": "…", "port": "[Out] Headphones"}],
   "gaps": [{"track": "them", "at": "…", "lost_s": 1.8}],
   "warnings": ["mic silent 60 s at …"],
+  "language": "ru | en",
   "summary_done": false,
+  "summary_skipped": false,
   "error": null,
   "redo": "missing | transcript | all | null",
   "stage": "transcribe | summary | null"
 }
 ```
+
+`language` worker берёт из конфига при первой обработке, `redo --language` его меняет. `summary_skipped: true` — `claude` не нашёлся в `PATH`.
 
 `status` — единственный источник правды о состоянии. Запись идёт атомарно: во временный файл, затем `os.replace`.
 
@@ -141,6 +146,7 @@ queued → processing (worker) → done | error
 - Уведомления `notify-send`: старт записи, стоп с длительностью, саммари готово с путём к `summary.md`, ошибка, молчащий микрофон. Удаление короткой встречи проходит без уведомления.
 - Очередь обработки: FIFO, по одной встрече. Пока идёт Запись или Пауза, worker не запускается. Если звонок начался во время обработки, группа процессов worker'а получает `SIGSTOP` и `SIGCONT` после закрытия встречи: iGPU и CPU остаются звонку. Исключение — этап `summary` (`meta.stage`): он ждёт только сеть, а таймаут `claude` шёл бы и во время остановки. У worker'а есть бюджет `1800 с + длительность встречи` по времени работы без остановок; превысил — `SIGKILL` группе и `error`. Worker, вышедший с ненулевым кодом в `queued` или `processing`, тоже ставит встрече `error`.
 - Сбой `pactl` (не запустился, упал, битый JSON) не роняет демон: остаётся прежний снимок, ошибка — в журнал. Упавшая подписка перезапускается через секунду, снимки — после этой секунды.
+- Если `echo_cancel = true`, а библиотеки или модели LocalVQE нет, демон при старте шлёт одно уведомление «эхо не подавляется: запустите meetrec setup» и пишет `me.wav` как есть.
 - `SIGUSR1` только ставит флаг пересканирования: `queue.Queue` нереентерабелен, обработчик сигнала его не трогает.
 - Старт демона и `SIGUSR1`: просмотр `recordings_dir`.
   - `recording` или `pause` (демон упал посреди встречи): починить заголовки WAV (§8) и поставить `queued`; встреча короче `min_meeting_s` удаляется, как при обычном закрытии.
@@ -154,16 +160,17 @@ queued → processing (worker) → done | error
 
 ## 9. Обработка (`process.py`) → 05, 06, 07, 09, 11
 
-Worker запускается отдельным процессом под `nice -n 19` в своей группе процессов: `python -m meetrec.process meeting <папка>`. Что делать, решает план из `meta.redo` (`missing`, если пусто) и готовых файлов; `redo` очищается только при `done`, так что упавший посреди `redo --all` worker повторит то же самое. Подкоманды `track <wav> <tsv> <backend>` и `echo <папка>` — дочерние процессы расшифровки и LocalVQE.
+Worker запускается отдельным процессом под `nice -n 19` в своей группе процессов: `python -m meetrec.process meeting <папка>`. Что делать, решает план из `meta.redo` (`missing`, если пусто) и готовых файлов; `redo` очищается только при `done`, так что упавший посреди `redo --all` worker повторит то же самое. Подкоманды `track <wav> <tsv> <backend> <language>` и `echo <папка>` — дочерние процессы расшифровки и LocalVQE.
 
 1. **LocalVQE**, только если `echo_cancel = true` и в `meta.json.ports` хоть раз был `[Out] Speaker`. На этой машине гнездо наушников часто не распознаётся: наушники `not available`, звук идёт в `[Out] Speaker` на малой громкости, так что по порту наушники от динамиков не отличить. Дорожки обрезаются до общей длины, затем вызывается `localvqe_new(model)` и `localvqe_process_s16(ctx, me, them, n, out)` из `<data_dir>/liblocalvqe.so` через `ctypes`; результат пишется в `me.clean.wav`. Перед `liblocalvqe.so` по пути загружаются `libggml-base.so.0` и `libggml.so.0`. LocalVQE запускается в дочернем процессе (`python -m meetrec.process echo <папка>`): если он упал, даже нативно, берётся исходный `me.wav`, а в `warnings` добавляется запись. В наушниках LocalVQE снижает громкость на 13 дБ и добавляет гул (→ 11), поэтому всегда его не включаем.
 2. **Расшифровка**: каждая дорожка (`me.clean.wav` или `me.wav`, затем `them.wav`) идёт в своём дочернем процессе. Дорожку без файла или без единого кадра (её `pw-record` умер сразу) worker не расшифровывает: пишет пустой `.tokens.tsv` и запись в `warnings`, вторая дорожка расшифровывается как обычно:
    ```python
-   tc.Model(gigaam_path, backend="vulkan").session().run(pcm_f32, language="ru", timestamps="token")
+   tc.Model(model_path, backend="vulkan").session().run(pcm_f32, language=meta.language, timestamps="token")
    ```
+   Модель — по `meta.language`: `ru` → `gigaam-v3-e2e-ctc-Q8_0.gguf`, `en` → `parakeet-tdt-0.6b-v2-Q8_0.gguf`. Если файла нет, встреча получает `error` с подсказкой запустить `setup` для этого языка.
    Если процесс упал или вернул ошибку, один повтор с `backend="cpu"` и `session(n_threads=4)`. Если упал и он, встреча получает `error` и уведомление. Токены пишутся в `<track>.tokens.tsv`. Пиковое потребление памяти на час дорожки — около 1,6 ГиБ, поэтому дорожки идут по одной.
 3. **Транскрипт** (`transcript.py`) → 06:
-   - Слово начинается с токена на `▁` и продолжается до следующего такого токена. Время слова — от `t0` первого токена до `t1` последнего.
+   - Слово начинается с токена на `▁` (GigaAM) или на пробел (Parakeet) и продолжается до следующего такого токена. Время слова — от `t0` первого токена до `t1` последнего.
    - Фраза — подряд идущие слова одной дорожки. Новая фраза начинается, если пауза между словами ≥ 1000 мс, или если фраза длиннее 15 с и предыдущее слово кончается на `.?!`.
    - Фразы обеих дорожек сортируются по времени начала, перекрытия не обрабатываются.
    - Формат:
@@ -189,30 +196,9 @@ Worker запускается отдельным процессом под `nice
      …
      </transcript>
      ```
-   - `meetrec/prompt.md` (проверен на встрече 2 ноября, ветка `prototype/summary`), `{user_name}` подставляется из конфига:
-     ```
-     Ты получаешь транскрипт рабочей встречи, распознанный автоматически. В нём ошибки распознавания: сломанные слова, склейки, искажённые термины и имена. Строки помечены `me` (пользователь — {user_name}) и `them` (все остальные участники одной дорожкой, без разделения по людям).
-
-     Напиши саммари встречи на русском в Markdown. Только то, что есть в транскрипте; не додумывай. Восстанавливай искажённые термины по смыслу; если в контексте есть словарь терминов, сверяйся с ним. Если не уверен в слове, оставь как в транскрипте. Задачи пользователя помечай «— я».
-
-     Структура:
-
-     # <тема встречи одной строкой>
-
-     ## Кратко
-     3–5 пунктов: о чём говорили и к чему пришли.
-
-     ## Решения
-     Что решили. Каждое — одной строкой, с меткой времени `[ЧЧ:ММ:СС]` из транскрипта.
-
-     ## Задачи
-     `- [ ] <что сделать> — <кто, если назван> — <срок, если назван> [ЧЧ:ММ:СС]`
-
-     ## Открытые вопросы
-     Что подняли, но не решили.
-
-     Выводи только Markdown саммари, без предисловий.
-     ```
+   - Системный промпт — `meetrec/prompt.md`, по-английски. `{user_name}` подставляется из конфига, `{language}` — название языка встречи: саммари пишется на нём. Русская версия проверена на встрече 2 ноября, ветка `prototype/summary`.
+   - Без `glossary_repo` блока `<glossary>` нет.
+   - Если `claude` нет в `PATH`, саммари пропускается: `summary_skipped: true`, `status` такую встречу не показывает.
    - Если `claude` упал, встреча всё равно получает `done`, но с `summary_done: false`, и приходит уведомление.
 
 ## 10. CLI → 13, 14
@@ -221,19 +207,21 @@ Worker запускается отдельным процессом под `nice
 - `meetrec status` — показывает:
   - состояние демона (его пишет `<data_dir>/state.json`);
   - очередь;
-  - встречи с `error` или с `summary_done: false`.
-- `meetrec redo <папка> [--transcript | --all]`:
+  - встречи с `error` или с `summary_done: false` без `summary_skipped`.
+- `meetrec redo <папка> [--transcript | --all] [--language ru|en]`:
   - Встречу в `recording`, `pause` или `processing` команда не трогает и печатает её статус.
   - Что доделывается:
     - без флага — всё, чего не хватает;
     - `--transcript` — `transcript.md` из `*.tokens.tsv`, затем саммари;
-    - `--all` — всё заново, с расшифровкой.
+    - `--all` — всё заново, с расшифровкой;
+    - `--language` — меняет `meta.language` и включает `--all`.
   - Сама команда ничего не считает: пишет `queued` и нужный этап в `meta.json`, затем `systemctl --user kill --kill-whom=main -s USR1 meetrec` (без `--kill-whom=main` сигнал уйдёт всей группе и убьёт `pw-record`).
 - `meetrec setup` можно запускать повторно, готовые шаги пропускаются:
-  1. Модели скачиваются в `<data_dir>/models/` с проверкой sha256. Если файл уже есть в `~/.cache/meetrec/models/`, он переносится.
+  1. Модели скачиваются в `<data_dir>/models/` с проверкой sha256: модель языка из `language` и, только при `echo_cancel = true`, модель LocalVQE. После смены языка или включения `echo_cancel` `setup` запускают заново.
      - `gigaam-v3-e2e-ctc-Q8_0.gguf` ← `https://huggingface.co/handy-computer/gigaam-v3-e2e-ctc-gguf/resolve/main/gigaam-v3-e2e-ctc-Q8_0.gguf`, sha256 `9ccce4750dc813a493d96ca15ee251712bedec15ac9a02fa3d2bd732f08ae5eb`
+     - `parakeet-tdt-0.6b-v2-Q8_0.gguf` ← `https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v2-gguf/resolve/main/parakeet-tdt-0.6b-v2-Q8_0.gguf`, sha256 `f0d0e99cebb6d3b83f1f7069b82b5d3c2e39a54545b0da039cb4bafd9c4e5caa`
      - `localvqe-v1.4-aec-200K-f32.gguf` ← `https://huggingface.co/LocalAI-io/LocalVQE/resolve/main/localvqe-v1.4-aec-200K-f32.gguf`, sha256 `b6e43138588a83bfe903ab5e143b4020b91c1e1629f5a575ac5855ff0003c731`
-  2. LocalVQE: `git clone --recursive https://github.com/localai-org/LocalVQE` на коммите `7f61cd0`, затем `uvx cmake -S ggml -B ggml/build -DCMAKE_BUILD_TYPE=Release -DLOCALVQE_BUILD_SHARED=ON` и `uvx cmake --build ggml/build -j6 --target localvqe_shared`. Исходники и сборка лежат в `<data_dir>/src/LocalVQE` (сборку из `~/.cache/meetrec/src` `setup` переносит); библиотека — `ggml/build/bin/liblocalvqe.so`. Её RUNPATH указывает на папку сборки, поэтому `libggml-base.so.0` и `libggml.so.0` загружаются явно по пути с `RTLD_GLOBAL`.
+  2. LocalVQE, только при `echo_cancel = true`: `git clone --recursive https://github.com/localai-org/LocalVQE` на коммите `7f61cd0`, затем `uvx cmake -S ggml -B ggml/build -DCMAKE_BUILD_TYPE=Release -DLOCALVQE_BUILD_SHARED=ON` и `uvx cmake --build ggml/build --parallel --target localvqe_shared`. Исходники и сборка лежат в `<data_dir>/src/LocalVQE`; библиотека — `ggml/build/bin/liblocalvqe.so`. Её RUNPATH указывает на папку сборки, поэтому `libggml-base.so.0` и `libggml.so.0` загружаются явно по пути с `RTLD_GLOBAL`.
   3. Юнит `~/.config/systemd/user/meetrec.service`, затем `systemctl --user daemon-reload` и `enable --now`:
      ```ini
      [Unit]
@@ -247,8 +235,8 @@ Worker запускается отдельным процессом под `nice
      [Install]
      WantedBy=default.target
      ```
-- Установка: `uv tool install --editable ~/PycharmProjects/meetrec --python 3.14`, затем `meetrec setup`.
-- Обновление: поднять версию или коммит, выполнить `meetrec setup` и `systemctl --user restart meetrec`. После смены `transcribe-cpp` прогнать `meetrec redo --all` на эталонной встрече `~/Recordings/bench` и сверить качество.
+- Установка: `uv tool install git+https://github.com/heaviss/meetrec --python 3.14`, затем `meetrec setup`. Для разработки — `uv tool install --editable . --python 3.14` из клона.
+- Обновление: `uv tool upgrade meetrec`, затем `meetrec setup` и `systemctl --user restart meetrec`. После смены `transcribe-cpp` прогнать `meetrec redo --all` на эталонной встрече `~/Recordings/bench` и сверить качество.
 - Логи демона идут в stdout и попадают в journald (`journalctl --user -u meetrec`).
 
 ## 11. Проверки

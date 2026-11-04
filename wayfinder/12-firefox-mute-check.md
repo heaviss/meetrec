@@ -13,6 +13,8 @@ blocked_by: []
 
 ## Steps
 
+Скрипты `checks/` удалены, есть в истории git.
+
 `checks/watch-mic.sh` пишет в `~/Recordings/check-mic-<время>.log` каждое событие `source-output` и кто держит микрофон. Запустить, затем по очереди, отмечая время:
 
 1. Meet в Firefox: экран предпросмотра 20 с → войти → mute на 60 с → unmute → выйти.

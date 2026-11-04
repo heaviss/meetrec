@@ -13,6 +13,8 @@ blocked_by: []
 
 ## Steps
 
+Скрипты `checks/` удалены, есть в истории git.
+
 Без `libsndfile`: нужна только разделяемая библиотека с C API (`LOCALVQE_BUILD_SHARED`), WAV читает Python. Исходники — `~/.cache/meetrec/src/LocalVQE` (`7f61cd0`), модель — `~/.cache/meetrec/models/localvqe-v1.4-aec-200K-f32.gguf` (2 924 224 Б).
 
 1. Сборка (сделана 2026-11-04, `ggml/build/bin/liblocalvqe.so`; руками: авто-режим агента не компилирует сторонний код):
