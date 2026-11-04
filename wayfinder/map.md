@@ -36,6 +36,7 @@ label: wayfinder:map
 - [Что пишет summary.md и с каким промптом](07-summary.md): «Кратко / Решения / Задачи / Открытые вопросы» с метками времени; глоссарии work-repo на каждой встрече; `me` — Имя Фамилия; `claude -p` без инструментов и пользовательских настроек; сбой — встреча Готова без саммари, повтор вручную.
 - [Какие ручные команды есть у meetrec](13-manual-commands.md): `meetrec status` и `meetrec redo <папка> [--transcript|--all]`; `redo` ставит в очередь через `meta.json` + `SIGUSR1` демону, сам не считает; метки слов хранятся в `*.tokens.tsv`.
 - [Проверить, что LocalVQE не портит запись в наушниках](11-localvqe-headphones-check.md): портит — −13 дБ и гул, расшифровка не лучше; LocalVQE только если за встречу `active_port` был Speaker. Сборка — только `liblocalvqe.so` (`LOCALVQE_BUILD_SHARED`), без `libsndfile`, вызов через `ctypes`.
+- [Как ставить и обновлять meetrec](14-install.md): `uv tool install --editable` на Python 3.14; идемпотентный `meetrec setup` (модели с sha256, сборка `liblocalvqe.so`, юнит `systemd --user`); данные в `~/.local/share/meetrec/`, необязательный `~/.config/meetrec/config.toml`; логи в journald; обновление вручную с прогоном эталонной встречи.
 
 ## Not yet specified
 
