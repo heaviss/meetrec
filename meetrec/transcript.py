@@ -9,7 +9,8 @@ MAX_PHRASE_MS = 15000
 MS_PER_S = 1000
 SECONDS_PER_MINUTE = 60
 SENTENCE_END = (".", "?", "!")
-WORD_START = "▁"
+# GigaAM marks a word start with the SentencePiece "▁", Parakeet with a plain space.
+WORD_STARTS = ("▁", " ")
 
 
 def read_tokens(path: Path) -> list[Token]:
@@ -27,8 +28,8 @@ def write_tokens(path: Path, tokens: list[Token]) -> None:
 
 def glue(glued: list[Token], token: Token) -> None:
     start_ms, end_ms, piece = token
-    if piece.startswith(WORD_START) or not glued:
-        glued.append((start_ms, end_ms, piece.lstrip(WORD_START)))
+    if piece.startswith(WORD_STARTS) or not glued:
+        glued.append((start_ms, end_ms, piece.lstrip("".join(WORD_STARTS))))
         return
     word_start, _, text = glued[-1]
     glued[-1] = (word_start, end_ms, f"{text}{piece}")

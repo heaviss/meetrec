@@ -19,6 +19,13 @@ def test_tokens_glue_into_words_split_on_pause() -> None:
     assert phrases(tokens, "me") == [(0, "me", "Привет."), (2000, "me", "Как дела")]
 
 
+def test_parakeet_tokens_start_words_with_a_space() -> None:
+    so = [(240, 560, " And"), (560, 800, " so"), (800, 960, ",")]
+    tokens = [*so, (2280, 2360, " fe"), (2360, 2520, "llow")]
+
+    assert phrases(tokens, "me") == [(240, "me", "And so,"), (2280, "me", "fellow")]
+
+
 def test_long_phrase_splits_at_sentence_end() -> None:
     tokens = [word_token(index) for index in range(40)]
 

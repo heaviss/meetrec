@@ -8,6 +8,7 @@ from meetrec import detect, pactl_events
 from meetrec.config import Config
 from meetrec.lifecycle import Action, Lifecycle, State
 from meetrec.meeting import write_json
+from meetrec.notify import notify
 from meetrec.processing import Processing
 from meetrec.session import Session
 
@@ -52,6 +53,8 @@ class Daemon:
         self.events.put("mic")
         self.events.put("sink")
         log.info("meetrec daemon started, pause %ss", self.cfg.pause_s)
+        if self.cfg.echo_cancel and not (self.cfg.localvqe_lib.exists() and self.cfg.localvqe_model.exists()):
+            notify("эхо не подавляется: запустите meetrec setup")
         with closing(self):
             while not self.stop.is_set():
                 self.on_event(pactl_events.next_event(self.events), time.monotonic())

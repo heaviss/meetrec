@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from meetrec.config import Config, load_config
+from meetrec.config import ASR_MODELS, Config, load_config
 from meetrec.daemon import Daemon
 from meetrec.install import setup
 from meetrec.meeting import ACTIVE, Meeting, list_meetings
@@ -26,7 +26,7 @@ def attention_line(meeting: Meeting) -> str | None:
     if meeting.status == "error":
         error = meeting.meta["error"]
         return f"error: {meeting.path} — {error}"
-    if meeting.status == "done" and not meeting.meta["summary_done"]:
+    if meeting.status == "done" and not (meeting.meta["summary_done"] or meeting.meta.get("summary_skipped")):
         return f"no summary: {meeting.path}"
     return None
 
@@ -44,13 +44,15 @@ def status(cfg: Config) -> None:
     sys.stdout.writelines(f"{line}\n" for line in (*daemon_lines(state), *attention))
 
 
-def redo(folder: Path, stage: str) -> None:
+def redo(folder: Path, stage: str, language: str | None) -> None:
     folder = folder.expanduser().resolve()
     if not (folder / "meta.json").exists():
         sys.exit(f"{folder} is not a meeting folder")
     meeting = Meeting.load(folder)
     if meeting.status in ACTIVE:
         sys.exit(f"{folder.name} is {meeting.status}, leaving it alone")
+    if language:
+        meeting.update(language=language)
     meeting.update(status="queued", redo=stage)
     # --kill-whom=main: the default signals the whole cgroup, and SIGUSR1 would kill pw-record.
     kill = ["systemctl", "--user", "kill", "--kill-whom=main", "-s", "USR1", "meetrec"]
@@ -65,13 +67,14 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("run", help="the daemon; started by the systemd user unit")
     commands.add_parser("status", help="what the daemon is doing and which meetings need attention")
-    commands.add_parser("setup", help="models, LocalVQE, systemd unit; safe to rerun")
+    commands.add_parser("setup", help="the language's model, LocalVQE if echo_cancel, systemd unit; safe to rerun")
     redo_parser = commands.add_parser("redo", help="queue a meeting for processing again")
     redo_parser.add_argument("folder", type=Path)
     stage = redo_parser.add_mutually_exclusive_group()
     rebuild_help = "rebuild transcript.md from *.tokens.tsv, then the summary"
     stage.add_argument("--transcript", action="store_const", const="transcript", dest="stage", help=rebuild_help)
     stage.add_argument("--all", action="store_const", const="all", dest="stage", help="everything, transcription too")
+    redo_parser.add_argument("--language", choices=ASR_MODELS, help="the meeting's language; implies --all")
     return parser
 
 
@@ -85,6 +88,7 @@ def main() -> None:
         case "status":
             status(cfg)
         case "redo":
-            redo(args.folder, args.stage or "missing")
+            stage = "all" if args.language else args.stage or "missing"
+            redo(args.folder, stage, args.language)
         case "setup":
             setup(cfg)

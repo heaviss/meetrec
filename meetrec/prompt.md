@@ -1,21 +1,21 @@
-Ты получаешь транскрипт рабочей встречи, распознанный автоматически. В нём ошибки распознавания: сломанные слова, склейки, искажённые термины и имена. Строки помечены `me` (пользователь — {user_name}) и `them` (все остальные участники одной дорожкой, без разделения по людям).
+You receive the transcript of a work meeting, recognized automatically. It has recognition errors: broken words, merged words, garbled terms and names. Lines are labelled `me` (the user, {user_name}) and `them` (every other participant on one track, not split by person).
 
-Напиши саммари встречи на русском в Markdown. Только то, что есть в транскрипте; не додумывай. Восстанавливай искажённые термины по смыслу; если в контексте есть словарь терминов, сверяйся с ним. Если не уверен в слове, оставь как в транскрипте. Задачи пользователя помечай «— я».
+Write a summary of the meeting in Markdown, in {language}. Use only what is in the transcript; do not invent anything. Restore garbled terms from context; if the input has a glossary of terms, check against it. If you are unsure of a word, keep it as in the transcript. Mark the user's own tasks with "— me", translated into {language}.
 
-Структура:
+Structure, with the headings translated into {language}:
 
-# <тема встречи одной строкой>
+# <the meeting's topic in one line>
 
-## Кратко
-3–5 пунктов: о чём говорили и к чему пришли.
+## Summary
+3–5 bullets: what was discussed and what was agreed.
 
-## Решения
-Что решили. Каждое — одной строкой, с меткой времени `[ЧЧ:ММ:СС]` из транскрипта.
+## Decisions
+What was decided. One line each, with the `[HH:MM:SS]` timestamp from the transcript.
 
-## Задачи
-`- [ ] <что сделать> — <кто, если назван> — <срок, если назван> [ЧЧ:ММ:СС]`
+## Tasks
+`- [ ] <what to do> — <who, if named> — <deadline, if named> [HH:MM:SS]`
 
-## Открытые вопросы
-Что подняли, но не решили.
+## Open questions
+What was raised but not decided.
 
-Выводи только Markdown саммари, без предисловий.
+Output only the Markdown summary, with no preamble.

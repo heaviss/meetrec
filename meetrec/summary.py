@@ -1,7 +1,9 @@
 import logging
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from types import MappingProxyType
 
 from meetrec.config import Config
 
@@ -9,6 +11,7 @@ log = logging.getLogger(__name__)
 
 PROMPT = Path(__file__).with_name("prompt.md")
 CLAUDE_TIMEOUT_S = 900
+LANGUAGE_NAMES = MappingProxyType({"ru": "Russian", "en": "English"})
 CLAUDE = ("claude", "-p", "--no-session-persistence", "--tools", "", "--setting-sources", "project")
 
 
@@ -17,7 +20,9 @@ def glossary_section(repo: Path, name: str) -> str:
     return f"### {name}\n{body}"
 
 
-def glossary(repo: Path) -> str:
+def glossary(repo: Path | None) -> str:
+    if repo is None:
+        return ""
     if not (repo / ".git").exists():
         log.warning("no glossary: %s is not a git repository", repo)
         return ""
@@ -34,11 +39,19 @@ def claude_input(transcript: str, terms: str) -> str:
     return f"<glossary>\n{terms}\n</glossary>\n\n{wrapped}"
 
 
-def summarize(transcript: str, cfg: Config) -> str:
+def claude_available() -> bool:
+    return shutil.which(CLAUDE[0]) is not None
+
+
+def system_prompt(user_name: str, language: str) -> str:
+    return PROMPT.read_text().replace("{user_name}", user_name).replace("{language}", LANGUAGE_NAMES[language])
+
+
+def summarize(transcript: str, cfg: Config, language: str) -> str:
     text = claude_input(transcript, glossary(cfg.glossary_repo))
     with tempfile.TemporaryDirectory() as workdir:
         prompt = Path(workdir) / "prompt.md"
-        prompt.write_text(PROMPT.read_text().replace("{user_name}", cfg.user_name))
+        prompt.write_text(system_prompt(cfg.user_name, language))
         reply = subprocess.run(
             [*CLAUDE, "--system-prompt-file", str(prompt)],
             input=text,

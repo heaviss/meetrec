@@ -1,12 +1,11 @@
 import hashlib
 import logging
-import shutil
 import subprocess
 from pathlib import Path
 from types import MappingProxyType
 from urllib.request import urlretrieve
 
-from meetrec.config import Config
+from meetrec.config import ASR_MODELS, Config
 
 log = logging.getLogger(__name__)
 
@@ -15,6 +14,11 @@ MODELS = MappingProxyType(
         "gigaam-v3-e2e-ctc-Q8_0.gguf": (
             "https://huggingface.co/handy-computer/gigaam-v3-e2e-ctc-gguf/resolve/main/gigaam-v3-e2e-ctc-Q8_0.gguf",
             "9ccce4750dc813a493d96ca15ee251712bedec15ac9a02fa3d2bd732f08ae5eb",
+        ),
+        "parakeet-tdt-0.6b-v2-Q8_0.gguf": (
+            "https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v2-gguf/resolve/main/"
+            "parakeet-tdt-0.6b-v2-Q8_0.gguf",
+            "f0d0e99cebb6d3b83f1f7069b82b5d3c2e39a54545b0da039cb4bafd9c4e5caa",
         ),
         "localvqe-v1.4-aec-200K-f32.gguf": (
             "https://huggingface.co/LocalAI-io/LocalVQE/resolve/main/localvqe-v1.4-aec-200K-f32.gguf",
@@ -25,7 +29,6 @@ MODELS = MappingProxyType(
 LOCALVQE_REPO = "https://github.com/localai-org/LocalVQE.git"
 LOCALVQE_COMMIT = "7f61cd0"
 CMAKE = ("uvx", "cmake")
-OLD_CACHE = Path.home() / ".cache/meetrec"
 UNIT_PATH = Path.home() / ".config/systemd/user/meetrec.service"
 UNIT = """\
 [Unit]
@@ -52,11 +55,6 @@ def install_model(name: str, url: str, digest: str, models_dir: Path) -> None:
     dest = models_dir / name
     if dest.exists() and sha256(dest) == digest:
         return
-    old = OLD_CACHE / "models" / name
-    if old.exists() and sha256(old) == digest:
-        log.info("moving %s from %s", name, old.parent)
-        shutil.move(old, dest)
-        return
     log.info("downloading %s", url)
     partial = dest.with_suffix(".part")
     urlretrieve(url, partial)
@@ -68,12 +66,7 @@ def install_model(name: str, url: str, digest: str, models_dir: Path) -> None:
 
 def fetch_localvqe(src: Path) -> None:
     if not src.exists():
-        old = OLD_CACHE / "src/LocalVQE"
-        if old.exists():
-            src.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(old, src)
-        else:
-            subprocess.run(["git", "clone", "--recursive", LOCALVQE_REPO, str(src)], check=True)
+        subprocess.run(["git", "clone", "--recursive", LOCALVQE_REPO, str(src)], check=True)
     subprocess.run(["git", "-C", str(src), "checkout", LOCALVQE_COMMIT], check=True)
     subprocess.run(["git", "-C", str(src), "submodule", "update", "--init", "--recursive"], check=True)
 
@@ -81,7 +74,7 @@ def fetch_localvqe(src: Path) -> None:
 def build_localvqe(src: Path) -> None:
     configure = ("-S", "ggml", "-B", "ggml/build", "-DCMAKE_BUILD_TYPE=Release", "-DLOCALVQE_BUILD_SHARED=ON")
     subprocess.run([*CMAKE, *configure], cwd=src, check=True)
-    subprocess.run([*CMAKE, "--build", "ggml/build", "-j6", "--target", "localvqe_shared"], cwd=src, check=True)
+    subprocess.run([*CMAKE, "--build", "ggml/build", "--parallel", "--target", "localvqe_shared"], cwd=src, check=True)
 
 
 def install_localvqe(cfg: Config) -> None:
@@ -100,10 +93,17 @@ def install_unit() -> None:
     subprocess.run(["systemctl", "--user", "enable", "--now", "meetrec"], check=True)
 
 
+def wanted_models(cfg: Config) -> list[str]:
+    """Only the configured language's model; LocalVQE only with echo_cancel."""
+    echo = [cfg.localvqe_model.name] if cfg.echo_cancel else []
+    return [ASR_MODELS[cfg.language], *echo]
+
+
 def setup(cfg: Config) -> None:
     cfg.models_dir.mkdir(parents=True, exist_ok=True)
-    for name, (url, digest) in MODELS.items():
-        install_model(name, url, digest, cfg.models_dir)
-    install_localvqe(cfg)
+    for name in wanted_models(cfg):
+        install_model(name, *MODELS[name], cfg.models_dir)
+    if cfg.echo_cancel:
+        install_localvqe(cfg)
     install_unit()
     log.info("meetrec is set up; logs: journalctl --user -u meetrec -f")

@@ -1,4 +1,4 @@
-"""Worker: python -m meetrec.process meeting <folder> | track <wav> <tsv> <backend> | echo <folder>"""
+"""Worker: python -m meetrec.process meeting <folder> | track <wav> <tsv> <backend> <language> | echo <folder>"""
 
 import logging
 import subprocess
@@ -7,12 +7,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from meetrec import transcript
-from meetrec.asr import parse_backend, transcribe, transcribe_track
+from meetrec.asr import parse_backend, require_model, transcribe, transcribe_track
 from meetrec.config import Config, load_config
 from meetrec.echo import cancel_echo, played_on_speakers
 from meetrec.meeting import Meeting
 from meetrec.record import recorded_s
-from meetrec.summary import summarize
+from meetrec.summary import claude_available, summarize
 
 log = logging.getLogger(__name__)
 
@@ -45,13 +45,13 @@ def me_track(meeting: Meeting, cfg: Config) -> Path:
     return meeting.path / "me.wav"
 
 
-def transcribe_or_skip(meeting: Meeting, wav: Path, tsv: Path) -> None:
+def transcribe_or_skip(meeting: Meeting, wav: Path, tsv: Path, language: str) -> None:
     """A track that pw-record never filled has no speech: the other track still gets transcribed."""
     if not wav.exists() or recorded_s(wav) <= 0:
         meeting.append("warnings", f"{wav.name} is empty, transcribed as silence")
         tsv.write_text("")
         return
-    transcribe(wav, tsv)
+    transcribe(wav, tsv, language)
 
 
 def write_transcript(meeting: Meeting) -> None:
@@ -61,13 +61,17 @@ def write_transcript(meeting: Meeting) -> None:
 
 
 def write_summary(meeting: Meeting, cfg: Config) -> None:
+    if not claude_available():
+        log.info("no claude in PATH, skipping the summary of %s", meeting.path)
+        meeting.update(summary_skipped=True)
+        return
     try:
-        summary = summarize((meeting.path / "transcript.md").read_text(), cfg)
+        summary = summarize((meeting.path / "transcript.md").read_text(), cfg, meeting.meta["language"])
     except OSError, subprocess.SubprocessError, RuntimeError:
         log.exception("summary failed for %s", meeting.path)
         return
     (meeting.path / "summary.md").write_text(summary)
-    meeting.update(summary_done=True)
+    meeting.update(summary_done=True, summary_skipped=False)
 
 
 def run_stages(meeting: Meeting, redo: str, cfg: Config) -> None:
@@ -75,9 +79,11 @@ def run_stages(meeting: Meeting, redo: str, cfg: Config) -> None:
     have_tokens = all((folder / f"{name}.tokens.tsv").exists() for name in TRACKS)
     steps = plan(redo, have_tokens, (folder / "transcript.md").exists(), meeting.meta["summary_done"])
     if steps.transcribe:
+        language = meeting.meta["language"]
+        require_model(cfg, language)
         meeting.update(stage="transcribe")
-        transcribe_or_skip(meeting, me_track(meeting, cfg), folder / "me.tokens.tsv")
-        transcribe_or_skip(meeting, folder / "them.wav", folder / "them.tokens.tsv")
+        transcribe_or_skip(meeting, me_track(meeting, cfg), folder / "me.tokens.tsv", language)
+        transcribe_or_skip(meeting, folder / "them.wav", folder / "them.tokens.tsv", language)
     if steps.transcript:
         write_transcript(meeting)
     if steps.summary:
@@ -88,7 +94,8 @@ def run_stages(meeting: Meeting, redo: str, cfg: Config) -> None:
 def process(folder: Path, cfg: Config) -> None:
     meeting = Meeting.load(folder)
     redo = meeting.meta.get("redo") or "missing"
-    meeting.update(status="processing", error=None, stage=None)
+    # Meetings from before the language setting, and new ones, take the configured language once.
+    meeting.update(status="processing", error=None, stage=None, language=meeting.meta.get("language") or cfg.language)
     try:
         run_stages(meeting, redo, cfg)
     except Exception as error:
@@ -104,8 +111,8 @@ def main() -> None:
     match sys.argv[1:]:
         case ["meeting", folder]:
             process(Path(folder), cfg)
-        case ["track", wav, tsv, backend]:
-            transcribe_track(Path(wav), Path(tsv), parse_backend(backend), cfg)
+        case ["track", wav, tsv, backend, language]:
+            transcribe_track(Path(wav), Path(tsv), parse_backend(backend), cfg.asr_model(language), language)
         case ["echo", folder]:
             cancel_echo(Path(folder), cfg)
         case _:

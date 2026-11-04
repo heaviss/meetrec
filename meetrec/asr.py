@@ -24,17 +24,24 @@ def parse_backend(name: str) -> Backend:
     raise ValueError(f"unknown backend {name}")
 
 
-def transcribe_track(wav: Path, tsv: Path, backend: Backend, cfg: Config) -> None:
-    model = transcribe_cpp.Model(str(cfg.gigaam_model), backend=backend)
+def require_model(cfg: Config, language: str) -> None:
+    model = cfg.asr_model(language)
+    if not model.exists():
+        raise RuntimeError(f'{model.name} is missing: set language = "{language}" in the config and run meetrec setup')
+
+
+def transcribe_track(wav: Path, tsv: Path, backend: Backend, model_path: Path, language: str) -> None:
+    model = transcribe_cpp.Model(str(model_path), backend=backend)
     session = model.session(n_threads=CPU_THREADS) if backend == "cpu" else model.session()
-    recognized = session.run(as_float_pcm(read_s16(wav)), language="ru", timestamps="token")
+    recognized = session.run(as_float_pcm(read_s16(wav)), language=language, timestamps="token")
     transcript.write_tokens(tsv, [(token.t0_ms, token.t1_ms, token.text) for token in recognized.tokens])
 
 
-def transcribe(wav: Path, tsv: Path) -> None:
+def transcribe(wav: Path, tsv: Path, language: str) -> None:
     """Each attempt runs in its own process: a crash in ggml or Vulkan must not take the worker down."""
     for backend in BACKENDS:
-        child = subprocess.run([sys.executable, "-m", "meetrec.process", "track", str(wav), str(tsv), backend])
+        command = [sys.executable, "-m", "meetrec.process", "track", str(wav), str(tsv), backend, language]
+        child = subprocess.run(command)
         if child.returncode == 0:
             return
         log.warning("transcription of %s on %s failed", wav, backend)
