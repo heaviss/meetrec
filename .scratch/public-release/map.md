@@ -24,6 +24,8 @@ label: wayfinder:map
 
 ## Decisions so far
 
+- [Допускают ли зависимости лицензию MIT](01-dependency-licenses.md): да; MIT и Apache-2.0, всё скачивается у пользователя; README называет сторонние компоненты и их лицензии.
+
 ## Not yet specified
 
 ## Out of scope
