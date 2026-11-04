@@ -1,6 +1,6 @@
 ---
 type: task
-status: open
+status: closed
 assignee: claude
 blocked_by: []
 ---
@@ -19,3 +19,12 @@ blocked_by: []
    `cd ~/.cache/meetrec/src/LocalVQE && uvx cmake -S ggml -B ggml/build -DCMAKE_BUILD_TYPE=Release -DLOCALVQE_BUILD_SHARED=ON && uvx cmake --build ggml/build -j6 --target localvqe_shared`
 2. В наушниках включить видео с речью (это `them`) и 2 минуты говорить поверх него и в паузах: `checks/record-two-tracks.sh 120`.
 3. `uv run -q --no-project --with transcribe-cpp==0.4.1 python -I checks/localvqe_check.py <папка из шага 2>` — пишет `me.clean.wav`, уровни и три расшифровки; послушать `me.wav` против `me.clean.wav`.
+
+## Resolution
+
+Запись 2026-11-04-162234 (`~/Recordings/check-localvqe/`), 120 с в наушниках поверх записи встречи 2 ноября.
+
+- Уровни: `me` −13,8 dBFS, `them` −22,5, `me.clean` −27,2: LocalVQE срезал ~13 дБ, хотя эха в наушниках нет. На слух `me.wav` чище, в `me.clean.wav` неприятный гул.
+- Расшифровка почти та же, местами хуже («Окейложносе друг друга» против «Окейложно. Э-э, все друг друга»).
+- Фраза из видео «Давайте послушаем» есть и в `me`, и в `me.clean`: если это просачивание из наушников, LocalVQE его не убрал.
+- Решение: LocalVQE не на каждой встрече, а только если за встречу `active_port` хоть раз был Speaker. При сбое определения наушников PipeWire как раз держит порт Speaker ([исследование](research/headphones-detection.md)), так что признак верный.
