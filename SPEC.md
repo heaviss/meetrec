@@ -25,15 +25,22 @@
 ## 2. Пакет и раскладка
 
 ```
-pyproject.toml          # requires-python >=3.14; deps: transcribe-cpp==0.4.1; [project.scripts] meetrec = "meetrec.cli:main"
+pyproject.toml          # requires-python >=3.14; deps: transcribe-cpp==0.4.1 + transcribe-cpp-native==0.4.1; dev: pytest, mypy, wemake-python-styleguide
+setup.cfg               # flake8/wemake config
 meetrec/
   cli.py                # meetrec run | status | redo | setup
   config.py             # defaults + ~/.config/meetrec/config.toml (tomllib)
   meeting.py            # Meeting folder, meta.json, statuses, WAV header repair
-  detect.py             # pactl subscribe + snapshots → "is a call on" + active port
-  record.py             # two pw-record processes, silence watch
-  daemon.py             # state machine and processing queue
-  process.py            # worker: LocalVQE → GigaAM → tokens.tsv → transcript.md → summary.md
+  detect.py             # pactl snapshots → "is a call on" + active port
+  pactl_events.py       # pactl subscribe → mic / sink events
+  record.py             # two pw-record processes, silence probe
+  session.py            # the meeting being recorded: apps, ports, silence, close
+  processing.py         # FIFO of closed meetings, the worker process, crash recovery
+  daemon.py             # Lifecycle state machine, event loop
+  process.py            # worker: stage plan → LocalVQE → GigaAM → tokens.tsv → transcript.md → summary.md
+  asr.py                # GigaAM via transcribe-cpp, one child process per track
+  echo.py               # LocalVQE via ctypes
+  audio.py              # 16 kHz mono s16 WAV I/O
   transcript.py         # tokens → phrase lines → transcript.md
   summary.py            # prompt + claude -p
   install.py            # meetrec setup
@@ -41,7 +48,7 @@ meetrec/
 tests/                  # one small test per non-trivial logic, see §10
 ```
 
-Других зависимостей нет: WAV читается через `wave`, LocalVQE вызывается через `ctypes`, конфиг — через `tomllib`.
+Других зависимостей нет: WAV читается через `wave`, LocalVQE вызывается через `ctypes`, конфиг — через `tomllib`. Проверки: `pytest`, `mypy --strict`, `flake8` с wemake-python-styleguide (пороги в `setup.cfg`), `ruff`.
 
 ## 3. Конфиг
 
@@ -82,7 +89,8 @@ tests/                  # one small test per non-trivial logic, see §10
   "gaps": [{"track": "them", "at": "…", "lost_s": 1.8}],
   "warnings": ["mic silent 60 s at …"],
   "summary_done": false,
-  "error": null
+  "error": null,
+  "redo": "missing | transcript | all | null"
 }
 ```
 
@@ -90,7 +98,7 @@ tests/                  # one small test per non-trivial logic, see §10
 
 ## 5. Как заметить звонок (`detect.py`) → 01
 
-1. Подпроцесс `LC_ALL=C pactl subscribe`. Учитываются только строки `^Event '(new|remove)' on source-output #\d+$`. `LC_ALL=C` обязателен: без него `pactl` выводит события по-русски, а `-f json` падает на не-ASCII.
+1. Подпроцесс `LC_ALL=C pactl subscribe`. Учитываются только строки `^Event '(new|remove)' on source-output #\d+$` и `^Event 'change' on (sink|server) #\S+$`; `sink-input` (громкость любого потока) — нет. `LC_ALL=C` обязателен: без него `pactl` выводит события по-русски, а `-f json` падает на не-ASCII.
 2. На каждое такое событие, а также при старте демона снимаются `LC_ALL=C pactl -f json list source-outputs` и `… list sources`. Поток считается **чужим микрофонным**, если:
    - его источник не monitor (`monitor_of_sink` пуст и имя не кончается на `.monitor`);
    - `application.name != "meetrec"`;
@@ -124,14 +132,17 @@ queued → processing (worker) → done | error
 ```
 
 - Во время Паузы `pw-record` продолжает писать: при возврате в Запись дорожки идут дальше без разрыва, а при закрытии хвост паузы просто остаётся в файлах.
+- **Длительность встречи** — от старта до момента, когда микрофон освободили в последний раз (`stopped_at`), без хвоста Паузы. У встречи, восстановленной после падения, `stopped_at` = `started_at` + длина `me.wav`.
 - Одна встреча пишется в каждый момент времени. Если звонок начался во время Паузы, это продолжение той же встречи.
 - Уведомления `notify-send`: старт записи, стоп с длительностью, саммари готово с путём к `summary.md`, ошибка, молчащий микрофон. Удаление короткой встречи проходит без уведомления.
-- Очередь обработки: FIFO, по одной встрече. Пока идёт Запись или Пауза, worker не запускается.
+- Очередь обработки: FIFO, по одной встрече. Пока идёт Запись или Пауза, worker не запускается. Если звонок начался во время обработки, группа процессов worker'а получает `SIGSTOP` и `SIGCONT` после закрытия встречи: iGPU и CPU остаются звонку.
+- Сбой `pactl` (не запустился, упал, битый JSON) не роняет демон: остаётся прежний снимок, ошибка — в журнал. Упавшая подписка перезапускается через секунду, снимки — после этой секунды.
+- `SIGUSR1` только ставит флаг пересканирования: `queue.Queue` нереентерабелен, обработчик сигнала его не трогает.
 - Старт демона и `SIGUSR1`: просмотр `recordings_dir`.
   - `recording` или `pause` (демон упал посреди встречи): починить заголовки WAV (§8) и поставить `queued`.
   - `processing`: снова `queued`.
   - Все `queued` по возрастанию `started_at` встают в очередь.
-- Остановка демона (`SIGTERM` от systemd): `pw-record` получает `SIGTERM` и закрывает WAV. Встреча переходит в `queued` и обработается при следующем старте.
+- Остановка демона (`SIGTERM` от systemd): `pw-record` получает `SIGTERM` и закрывает WAV. Встреча переходит в `queued` и обработается при следующем старте. Если звонок ещё идёт, после старта начнётся новая встреча: перезапуск посреди звонка режет её на две папки — принято.
 
 ## 8. Починка WAV
 
@@ -141,7 +152,7 @@ queued → processing (worker) → done | error
 
 Worker запускается отдельным процессом под `nice -n 19`: `python -m meetrec.process <папка> [--from transcribe|transcript|summary]`.
 
-1. **LocalVQE**, только если в `meta.json.ports` хоть раз был `[Out] Speaker`. Дорожки обрезаются до общей длины, затем вызывается `localvqe_new(model)` и `localvqe_process_s16(ctx, me, them, n, out)` из `<data_dir>/liblocalvqe.so` через `ctypes`; результат пишется в `me.clean.wav`. Перед `liblocalvqe.so` по пути загружаются `libggml-base.so.0` и `libggml.so.0`. Если LocalVQE упал, берётся исходный `me.wav`, а в `warnings` добавляется запись. В наушниках LocalVQE снижает громкость на 13 дБ и добавляет гул (→ 11), поэтому всегда его не включаем.
+1. **LocalVQE**, только если в `meta.json.ports` хоть раз был `[Out] Speaker`. Дорожки обрезаются до общей длины, затем вызывается `localvqe_new(model)` и `localvqe_process_s16(ctx, me, them, n, out)` из `<data_dir>/liblocalvqe.so` через `ctypes`; результат пишется в `me.clean.wav`. Перед `liblocalvqe.so` по пути загружаются `libggml-base.so.0` и `libggml.so.0`. LocalVQE запускается в дочернем процессе (`python -m meetrec.process echo <папка>`): если он упал, даже нативно, берётся исходный `me.wav`, а в `warnings` добавляется запись. В наушниках LocalVQE снижает громкость на 13 дБ и добавляет гул (→ 11), поэтому всегда его не включаем.
 2. **Расшифровка**: каждая дорожка (`me.clean.wav` или `me.wav`, затем `them.wav`) идёт в своём дочернем процессе:
    ```python
    tc.Model(gigaam_path, backend="vulkan").session().run(pcm_f32, language="ru", timestamps="token")
@@ -239,9 +250,11 @@ Worker запускается отдельным процессом под `nice
 На каждую нетривиальную логику — один маленький тест в `tests/`, на pytest без фикстур:
 
 - `detect`: из JSON-снимка `source-outputs`/`sources` выделяются чужие микрофонные потоки. Monitor, `meetrec` и pavucontrol отсекаются.
-- `daemon`: таймлайн событий (старт, освобождение, возврат внутри паузы, истечение паузы, короткая встреча) переводится в нужные статусы. Время инжектится, без `sleep`.
+- `daemon`: таймлайн событий (старт, освобождение, возврат внутри паузы, истечение паузы, короткая встреча) переводится в нужные действия `Lifecycle`. Время инжектится, без `sleep`.
+- `process`: план этапов для `missing` / `transcript` / `all` при разных наборах готовых файлов.
+- `processing`: встреча, оставшаяся в `recording` после падения, уходит в `queued`, и её длительность равна длине `me.wav`.
 - `meeting`: заголовок WAV, обрезанный как после `SIGKILL`, чинится, и `wave.open` читает верное число кадров.
-- `transcript`: на фрагменте `~/Recordings/bench/meeting-86min.gigaam-vk.tokens.tsv` проверяются границы фраз и формат строк; плюс чередование `me`/`them` на двух синтетических дорожках.
+- `transcript`: границы фраз, формат строк и чередование `me`/`them` — на синтетических токенах. Фрагменты настоящих встреч в репозиторий не кладём: это чужая речь.
 
 Ручная приёмка — первый живой звонок:
 - запись стартовала и остановилась;
@@ -254,4 +267,4 @@ Worker запускается отдельным процессом под `nice
 - Не проверено вживую:
   - поведение Chrome и Zoom;
   - следование за default sink при смене устройства;
-  - Vulkan-расшифровка во время видеозвонка (её снимает правило «worker ждёт конца Записи»).
+  - уживается ли Vulkan-расшифровка с видеозвонком, если звонок начат вне демона (worker во время Записи остановлен).

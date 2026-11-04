@@ -1,8 +1,11 @@
+import logging
 import subprocess
 import tempfile
 from pathlib import Path
 
 from meetrec.config import Config
+
+log = logging.getLogger(__name__)
 
 PROMPT = Path(__file__).with_name("prompt.md")
 CLAUDE_TIMEOUT_S = 900
@@ -16,6 +19,7 @@ def glossary_section(repo: Path, name: str) -> str:
 
 def glossary(repo: Path) -> str:
     if not (repo / ".git").exists():
+        log.warning("no glossary: %s is not a git repository", repo)
         return ""
     listing = subprocess.run(
         ["git", "ls-files", "GLOSSARY-MAP.md", "*GLOSSARY.md"], cwd=repo, capture_output=True, text=True, check=True
@@ -24,9 +28,10 @@ def glossary(repo: Path) -> str:
 
 
 def claude_input(transcript: str, terms: str) -> str:
+    wrapped = f"<transcript>\n{transcript}\n</transcript>"
     if not terms:
-        return transcript
-    return f"<glossary>\n{terms}\n</glossary>\n\n<transcript>\n{transcript}\n</transcript>"
+        return wrapped
+    return f"<glossary>\n{terms}\n</glossary>\n\n{wrapped}"
 
 
 def summarize(transcript: str, cfg: Config) -> str:

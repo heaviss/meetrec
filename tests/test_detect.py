@@ -1,6 +1,7 @@
 import pytest
 
-from meetrec.detect import Stream, classify, foreign_mic_streams
+from meetrec.detect import Stream, foreign_mic_streams
+from meetrec.pactl_events import classify
 
 MONITOR = 52
 MIC = 54
@@ -41,3 +42,7 @@ def test_only_foreign_mic_streams_count() -> None:
 )
 def test_classify(line: str, kind: str | None) -> None:
     assert classify(line) == kind
+
+
+def test_volume_change_is_not_a_sink_event() -> None:
+    assert classify("Event 'change' on sink-input #7") is None

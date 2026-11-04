@@ -31,8 +31,14 @@ def attention_line(meeting: Meeting) -> str | None:
     return None
 
 
+def daemon_active() -> bool:
+    return subprocess.run(["systemctl", "--user", "is-active", "--quiet", "meetrec"], check=False).returncode == 0
+
+
 def status(cfg: Config) -> None:
-    state = json.loads(cfg.state_path.read_text()) if cfg.state_path.exists() else None
+    # After a SIGKILL state.json outlives the daemon: trust it only while the unit runs.
+    running = cfg.state_path.exists() and daemon_active()
+    state = json.loads(cfg.state_path.read_text()) if running else None
     meetings = list_meetings(cfg.recordings_dir) if cfg.recordings_dir.exists() else []
     attention = [line for line in map(attention_line, meetings) if line]
     sys.stdout.writelines(f"{line}\n" for line in (*daemon_lines(state), *attention))
@@ -47,7 +53,10 @@ def redo(folder: Path, stage: str) -> None:
         sys.exit(f"{folder.name} is {meeting.status}, leaving it alone")
     meeting.update(status="queued", redo=stage)
     # --kill-whom=main: the default signals the whole cgroup, and SIGUSR1 would kill pw-record.
-    subprocess.run(["systemctl", "--user", "kill", "--kill-whom=main", "-s", "USR1", "meetrec"], check=True)
+    kill = ["systemctl", "--user", "kill", "--kill-whom=main", "-s", "USR1", "meetrec"]
+    if subprocess.run(kill, check=False).returncode:
+        sys.stdout.write(f"queued {folder.name} ({stage}); meetrec is not running, it picks this up on start\n")
+        return
     sys.stdout.write(f"queued {folder.name} ({stage})\n")
 
 

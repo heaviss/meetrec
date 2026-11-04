@@ -30,6 +30,10 @@ The text of a meeting, with each line marked as `me` or `them` and timestamped.
 **Summary**:
 A short write-up of a meeting made from its transcript.
 
+**Meeting duration**:
+From the start of a meeting until the microphone was last released; the pause after that does not count.
+_Avoid_: call length, recording length
+
 **Pause**:
 The wait after the microphone is released before a meeting is closed; if an app takes the microphone again within it, the same meeting continues.
 _Avoid_: grace period, timeout

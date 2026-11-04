@@ -1,13 +1,10 @@
 import array
 import ctypes
-import logging
 from pathlib import Path
 
 from meetrec.audio import read_s16, write_s16
 from meetrec.config import Config
 from meetrec.meeting import Meeting
-
-log = logging.getLogger(__name__)
 
 SPEAKER_PORT_SUFFIX = "Speaker"
 # The build bakes its own directory into RUNPATH; load the deps by path so a moved build still works.
@@ -51,14 +48,3 @@ def cancel_echo(folder: Path, cfg: Config) -> Path:
 
 def played_on_speakers(meeting: Meeting) -> bool:
     return any(str(entry["port"] or "").endswith(SPEAKER_PORT_SUFFIX) for entry in meeting.meta["ports"])
-
-
-def me_track(meeting: Meeting, cfg: Config) -> Path:
-    if not played_on_speakers(meeting):
-        return meeting.path / "me.wav"
-    try:
-        return cancel_echo(meeting.path, cfg)
-    except (OSError, RuntimeError, ValueError) as error:
-        log.exception("LocalVQE failed, transcribing the raw me.wav")
-        meeting.append("warnings", f"LocalVQE failed: {error}")
-    return meeting.path / "me.wav"

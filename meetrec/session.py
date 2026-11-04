@@ -4,16 +4,12 @@ from datetime import datetime
 from pathlib import Path
 
 from meetrec.detect import Stream, app_of
-from meetrec.meeting import Meeting
+from meetrec.meeting import Meeting, now_iso
 from meetrec.notify import notify
 from meetrec.record import Recorder
 from meetrec.transcript import MS_PER_S, clock
 
 SILENCE_CHECK_S = 10
-
-
-def now_iso() -> str:
-    return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 def app_label(app: dict[str, str | None]) -> str:
@@ -30,17 +26,25 @@ class Session:
     def __init__(self, recordings_dir: Path, streams: list[Stream]) -> None:
         self.meeting = Meeting.create(recordings_dir, datetime.now().astimezone())
         self.recorder = Recorder(self.meeting.path)
+        self.released_at: str | None = None
         self.silent_s = 0
+        self.silence_warned = False
         self.next_silence_check = time.monotonic() + SILENCE_CHECK_S
         apps = ", ".join(sorted({app_label(app_of(stream)) for stream in streams}))
         notify(f"Запись встречи: {apps}")
 
-    def set_status(self, status: str) -> None:
-        self.meeting.update(status=status)
+    def pause(self) -> None:
+        self.released_at = now_iso()
+        self.meeting.update(status="pause")
+
+    def resume(self) -> None:
+        self.released_at = None
+        self.meeting.update(status="recording")
 
     def close(self) -> Meeting:
+        """The meeting ends when the microphone was released, not when the pause ran out."""
         gaps = self.recorder.stop()
-        self.meeting.update(status="queued", stopped_at=now_iso(), gaps=gaps)
+        self.meeting.update(status="queued", stopped_at=self.released_at or now_iso(), gaps=gaps)
         return self.meeting
 
     def close_and_report(self) -> Meeting:
@@ -66,11 +70,12 @@ class Session:
         self.meeting.append("ports", {"at": now_iso(), **port})
 
     def watch_silence(self, now: float, threshold_s: int) -> None:
-        if now < self.next_silence_check:
+        if self.silence_warned or now < self.next_silence_check:
             return
         self.next_silence_check = now + SILENCE_CHECK_S
         silent = self.recorder.mic_silent(SILENCE_CHECK_S)
         self.silent_s = self.silent_s + SILENCE_CHECK_S if silent else 0
-        if self.silent_s == threshold_s // SILENCE_CHECK_S * SILENCE_CHECK_S:
+        if self.silent_s >= max(threshold_s, SILENCE_CHECK_S):
+            self.silence_warned = True
             notify(f"Микрофон молчит {self.silent_s} с — проверьте устройство")
             self.meeting.append("warnings", f"mic silent {self.silent_s} s at {now_iso()}")

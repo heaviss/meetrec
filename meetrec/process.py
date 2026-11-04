@@ -1,72 +1,56 @@
-"""Worker: python -m meetrec.process meeting <folder> | track <wav> <tsv> <backend>"""
+"""Worker: python -m meetrec.process meeting <folder> | track <wav> <tsv> <backend> | echo <folder>"""
 
 import logging
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
-
-import transcribe_cpp
 
 from meetrec import transcript
-from meetrec.audio import as_float_pcm, read_s16
+from meetrec.asr import parse_backend, transcribe, transcribe_track
 from meetrec.config import Config, load_config
-from meetrec.echo import me_track
+from meetrec.echo import cancel_echo, played_on_speakers
 from meetrec.meeting import Meeting
 from meetrec.summary import summarize
 
 log = logging.getLogger(__name__)
 
-Backend = Literal["vulkan", "cpu"]
-BACKENDS: tuple[Backend, ...] = ("vulkan", "cpu")
-CPU_THREADS = 4
 TRACKS = ("me", "them")
 
 
-def parse_backend(name: str) -> Backend:
-    for backend in BACKENDS:
-        if backend == name:
-            return backend
-    raise ValueError(f"unknown backend {name}")
+@dataclass(frozen=True)
+class Plan:
+    transcribe: bool
+    transcript: bool
+    summary: bool
 
 
-def transcribe_track(wav: Path, tsv: Path, backend: Backend, cfg: Config) -> None:
-    model = transcribe_cpp.Model(str(cfg.gigaam_model), backend=backend)
-    session = model.session(n_threads=CPU_THREADS) if backend == "cpu" else model.session()
-    recognized = session.run(as_float_pcm(read_s16(wav)), language="ru", timestamps="token")
-    transcript.write_tokens(tsv, [(token.t0_ms, token.t1_ms, token.text) for token in recognized.tokens])
+def plan(redo: str, have_tokens: bool, have_transcript: bool, summary_done: bool) -> Plan:
+    """What to (re)do: `missing` fills the gaps, `transcript` rebuilds from tokens, `all` starts over."""
+    must_transcribe = redo == "all" or not have_tokens
+    must_render = must_transcribe or redo == "transcript" or not have_transcript
+    return Plan(transcribe=must_transcribe, transcript=must_render, summary=must_render or not summary_done)
 
 
-def transcribe(wav: Path, tsv: Path) -> None:
-    for backend in BACKENDS:
-        child = subprocess.run([sys.executable, "-m", "meetrec.process", "track", str(wav), str(tsv), backend])
-        if child.returncode == 0:
-            return
-        log.warning("transcription of %s on %s failed", wav, backend)
-    raise RuntimeError(f"transcription failed: {wav.name}")
+def me_track(meeting: Meeting) -> Path:
+    """LocalVQE runs in a child too: a native crash there falls back to the raw track."""
+    if not played_on_speakers(meeting):
+        return meeting.path / "me.wav"
+    child = subprocess.run([sys.executable, "-m", "meetrec.process", "echo", str(meeting.path)])
+    if child.returncode == 0:
+        return meeting.path / "me.clean.wav"
+    log.warning("LocalVQE failed with %s, transcribing the raw me.wav", child.returncode)
+    meeting.append("warnings", f"LocalVQE failed with exit code {child.returncode}")
+    return meeting.path / "me.wav"
 
 
-def ensure_tokens(meeting: Meeting, redo: str, cfg: Config) -> bool:
-    tokens = [meeting.path / f"{track}.tokens.tsv" for track in TRACKS]
-    if redo != "all" and all(path.exists() for path in tokens):
-        return False
-    transcribe(me_track(meeting, cfg), tokens[0])
-    transcribe(meeting.path / "them.wav", tokens[1])
-    return True
-
-
-def ensure_transcript(meeting: Meeting, rebuild: bool) -> None:
-    path = meeting.path / "transcript.md"
-    if path.exists() and not rebuild:
-        return
+def write_transcript(meeting: Meeting) -> None:
     tracks = [transcript.phrases(transcript.read_tokens(meeting.path / f"{name}.tokens.tsv"), name) for name in TRACKS]
-    path.write_text(transcript.render(meeting.started_at, meeting.duration_s, *tracks))
+    (meeting.path / "transcript.md").write_text(transcript.render(meeting.started_at, meeting.duration_s, *tracks))
     meeting.update(summary_done=False)
 
 
-def ensure_summary(meeting: Meeting, cfg: Config) -> None:
-    if meeting.meta["summary_done"]:
-        return
+def write_summary(meeting: Meeting, cfg: Config) -> None:
     try:
         summary = summarize((meeting.path / "transcript.md").read_text(), cfg)
     except OSError, subprocess.SubprocessError, RuntimeError:
@@ -77,9 +61,16 @@ def ensure_summary(meeting: Meeting, cfg: Config) -> None:
 
 
 def run_stages(meeting: Meeting, redo: str, cfg: Config) -> None:
-    rebuilt = ensure_tokens(meeting, redo, cfg)
-    ensure_transcript(meeting, rebuilt or redo == "transcript")
-    ensure_summary(meeting, cfg)
+    folder = meeting.path
+    have_tokens = all((folder / f"{name}.tokens.tsv").exists() for name in TRACKS)
+    steps = plan(redo, have_tokens, (folder / "transcript.md").exists(), meeting.meta["summary_done"])
+    if steps.transcribe:
+        transcribe(me_track(meeting), folder / "me.tokens.tsv")
+        transcribe(folder / "them.wav", folder / "them.tokens.tsv")
+    if steps.transcript:
+        write_transcript(meeting)
+    if steps.summary:
+        write_summary(meeting, cfg)
 
 
 def process(folder: Path, cfg: Config) -> None:
@@ -102,6 +93,8 @@ def main() -> None:
             process(Path(folder), cfg)
         case ["track", wav, tsv, backend]:
             transcribe_track(Path(wav), Path(tsv), parse_backend(backend), cfg)
+        case ["echo", folder]:
+            cancel_echo(Path(folder), cfg)
         case _:
             sys.exit(__doc__)
 

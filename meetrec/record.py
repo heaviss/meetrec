@@ -6,7 +6,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from meetrec.audio import RATE, SAMPLE_BYTES
-from meetrec.meeting import WAV_HEADER, repair_wav
+from meetrec.meeting import WAV_HEADER, now_iso, repair_wav
 
 log = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class Recorder:
         if lost <= MAX_GAP_S:
             return None
         log.warning("%s lost %.1f s of %s", self.folder.name, lost, track)
-        return {"track": track, "lost_s": round(lost, 1)}
+        return {"track": track, "at": now_iso(), "lost_s": round(lost, 1)}
 
     def mic_silent(self, seconds: int) -> bool:
         path = self.folder / "me.wav"

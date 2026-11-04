@@ -1,16 +1,28 @@
 import logging
+import os
+import signal
 import subprocess
 import sys
 from collections import deque
+from datetime import timedelta
 from pathlib import Path
 
-from meetrec.meeting import Meeting, list_meetings, repair_wav
+from meetrec.meeting import Meeting, list_meetings, now_iso, repair_wav
 from meetrec.notify import notify
-from meetrec.session import now_iso
+from meetrec.record import recorded_s
 
 log = logging.getLogger(__name__)
 
 NICE = ("nice", "-n", "19")
+
+
+def recovered_stop(meeting: Meeting) -> str:
+    """When the daemon died mid-meeting, the meeting ended where its recording ends."""
+    me_wav = meeting.path / "me.wav"
+    if not me_wav.exists():
+        return now_iso()
+    stopped = meeting.started_at + timedelta(seconds=recorded_s(me_wav))
+    return stopped.isoformat(timespec="seconds")
 
 
 def recover(meeting: Meeting) -> None:
@@ -18,7 +30,7 @@ def recover(meeting: Meeting) -> None:
     if meeting.status in {"recording", "pause"}:
         for wav in meeting.path.glob("*.wav"):
             repair_wav(wav)
-        meeting.update(status="queued", stopped_at=meeting.meta["stopped_at"] or now_iso())
+        meeting.update(status="queued", stopped_at=meeting.meta["stopped_at"] or recovered_stop(meeting))
     elif meeting.status == "processing":
         meeting.update(status="queued")
 
@@ -64,7 +76,20 @@ class Processing:
     def start(self, path: Path) -> None:
         log.info("processing %s", path)
         self.current = path
-        self.worker = subprocess.Popen([*NICE, sys.executable, "-m", "meetrec.process", "meeting", str(path)])
+        command = [*NICE, sys.executable, "-m", "meetrec.process", "meeting", str(path)]
+        # Own process group, so suspend() stops the transcription children too.
+        self.worker = subprocess.Popen(command, start_new_session=True)
+
+    def signal_worker(self, signum: signal.Signals) -> None:
+        if self.worker and self.worker.poll() is None:
+            os.killpg(self.worker.pid, signum)
+
+    def suspend(self) -> None:
+        """A call started: keep the iGPU and CPU for it until the meeting is over."""
+        self.signal_worker(signal.SIGSTOP)
+
+    def resume(self) -> None:
+        self.signal_worker(signal.SIGCONT)
 
     def finish(self, returncode: int) -> None:
         meeting = Meeting.load(self.current) if self.current else None

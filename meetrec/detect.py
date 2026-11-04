@@ -1,11 +1,7 @@
 import json
 import logging
 import os
-import queue
-import re
 import subprocess
-import threading
-import time
 from types import MappingProxyType
 from typing import Any
 
@@ -13,7 +9,8 @@ log = logging.getLogger(__name__)
 
 # Without LC_ALL=C pactl localizes events, and `pactl -f json` fails on non-ASCII.
 C_ENV = MappingProxyType({**os.environ, "LC_ALL": "C"})
-EVENT = re.compile(r"^Event '(new|remove|change)' on (source-output|sink|server)\b")
+# pactl missing, failing, or printing broken JSON (ValueError covers JSONDecodeError).
+SNAPSHOT_ERRORS = (OSError, subprocess.SubprocessError, ValueError)
 NOT_A_MONITOR = frozenset((None, "", "n/a"))
 OWN_APP = "meetrec"
 
@@ -58,26 +55,3 @@ def default_port() -> dict[str, str | None] | None:
     if sink is None:
         return None
     return {"sink": name, "port": sink.get("active_port")}
-
-
-def classify(line: str) -> str | None:
-    match = EVENT.match(line)
-    if match is None:
-        return None
-    action, facility = match.groups()
-    if facility == "source-output":
-        return None if action == "change" else "mic"
-    return "sink" if action == "change" else None
-
-
-def subscribe(events: queue.Queue[str], stop: threading.Event) -> None:
-    while not stop.is_set():
-        with subprocess.Popen(["pactl", "subscribe"], stdout=subprocess.PIPE, text=True, env=C_ENV) as proc:
-            for line in proc.stdout or ():
-                kind = classify(line.strip())
-                if kind:
-                    events.put(kind)
-            log.warning("pactl subscribe exited with %s, resubscribing", proc.wait())
-        events.put("mic")
-        events.put("sink")
-        time.sleep(1)

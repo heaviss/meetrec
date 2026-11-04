@@ -65,6 +65,10 @@ class Meeting:
         self.update(**{key: [*self.meta[key], *entries]})
 
 
+def now_iso() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
 def new_meta(now: datetime) -> dict[str, Any]:
     return {
         "status": "recording",
