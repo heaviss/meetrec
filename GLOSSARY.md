@@ -5,7 +5,7 @@ Local recording and transcription of the user's calls.
 ## Language
 
 **Meeting**:
-One call recorded from the moment another app takes the microphone until it lets go of it for longer than the grace period.
+One call recorded from the moment another app takes the microphone until no app has held it for longer than the pause.
 _Avoid_: session, recording, call
 
 **Track `me`**:
@@ -29,3 +29,7 @@ The text of a meeting, with each line marked as `me` or `them` and timestamped.
 
 **Summary**:
 A short write-up of a meeting made from its transcript.
+
+**Pause**:
+The wait after the microphone is released before a meeting is closed; if an app takes the microphone again within it, the same meeting continues.
+_Avoid_: grace period, timeout
