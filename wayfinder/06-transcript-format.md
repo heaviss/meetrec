@@ -2,7 +2,7 @@
 type: prototype
 status: open
 assignee:
-blocked_by: [02]
+blocked_by: [02, 09]
 ---
 
 # Как выглядит transcript.md
