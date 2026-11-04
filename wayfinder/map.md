@@ -18,7 +18,7 @@ label: wayfinder:map
   - Пишем сразу, `notify-send` на старте и стопе, встречи короче 2 мин удаляем.
   - `them` = monitor системного вывода целиком (браузер: Meet, Zoom web; приложение Zoom).
   - Только русский: GigaAM-v3.
-  - Папка встречи `~/Recordings/<YYYY-MM-DD-HHMM>/`: `me.wav`, `them.wav`, `transcript.md`, `summary.md`; звук не удаляется.
+  - Папка встречи `~/Recordings/<YYYY-MM-DD-HHMM>/`: `me.wav`, `them.wav`, `transcript.md`, `summary.md` (+ `meta.json`, `*.tokens.tsv`); звук не удаляется.
   - Звук не покидает машину; текст транскрипта уходит в `claude -p`.
 - Для grilling-тикетов: навыки `grilling` и `domain-modeling`.
 
@@ -34,6 +34,7 @@ label: wayfinder:map
 - [Вызывать transcribe.cpp как CLI или через Python-биндинг](09-cli-or-binding.md): биндинг `transcribe-cpp==0.4.1`, отдельный процесс на дорожку под `nice -n 19`; Vulkan, при сбое один повтор на CPU в 4 потока, затем Ошибка.
 - [Как выглядит transcript.md](06-transcript-format.md): строки-фразы по паузе 1 с (до 15 с) и смене `me`/`them`, по времени начала, `**[ЧЧ:ММ:СС] me:** текст`, шапка с датой и длительностью; текст без чистки, термины правит саммари по глоссариям work-repo.
 - [Что пишет summary.md и с каким промптом](07-summary.md): «Кратко / Решения / Задачи / Открытые вопросы» с метками времени; глоссарии work-repo на каждой встрече; `me` — Имя Фамилия; `claude -p` без инструментов и пользовательских настроек; сбой — встреча Готова без саммари, повтор вручную.
+- [Какие ручные команды есть у meetrec](13-manual-commands.md): `meetrec status` и `meetrec redo <папка> [--transcript|--all]`; `redo` ставит в очередь через `meta.json` + `SIGUSR1` демону, сам не считает; метки слов хранятся в `*.tokens.tsv`.
 
 ## Not yet specified
 
