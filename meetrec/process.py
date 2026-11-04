@@ -33,9 +33,9 @@ def plan(redo: str, have_tokens: bool, have_transcript: bool, summary_done: bool
     return Plan(transcribe=must_transcribe, transcript=must_render, summary=must_render or not summary_done)
 
 
-def me_track(meeting: Meeting) -> Path:
+def me_track(meeting: Meeting, cfg: Config) -> Path:
     """LocalVQE runs in a child too: a native crash there falls back to the raw track."""
-    if not played_on_speakers(meeting):
+    if not (cfg.echo_cancel and played_on_speakers(meeting)):
         return meeting.path / "me.wav"
     child = subprocess.run([sys.executable, "-m", "meetrec.process", "echo", str(meeting.path)])
     if child.returncode == 0:
@@ -76,7 +76,7 @@ def run_stages(meeting: Meeting, redo: str, cfg: Config) -> None:
     steps = plan(redo, have_tokens, (folder / "transcript.md").exists(), meeting.meta["summary_done"])
     if steps.transcribe:
         meeting.update(stage="transcribe")
-        transcribe_or_skip(meeting, me_track(meeting), folder / "me.tokens.tsv")
+        transcribe_or_skip(meeting, me_track(meeting, cfg), folder / "me.tokens.tsv")
         transcribe_or_skip(meeting, folder / "them.wav", folder / "them.tokens.tsv")
     if steps.transcript:
         write_transcript(meeting)

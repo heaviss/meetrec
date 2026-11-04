@@ -10,7 +10,7 @@
 - автостарт и автостоп по микрофону;
 - две дорожки;
 - расшифровка только на русском;
-- подавление эха только при динамиках;
+- подавление эха только при динамиках и только с `echo_cancel = true`;
 - транскрипт и саммари через `claude -p`;
 - `status` / `redo` / `setup`.
 
@@ -61,6 +61,7 @@ tests/                  # one small test per non-trivial logic, see §11
 | `pause_s` | `30`: Firefox, как и Chrome, держит микрофон при mute и на экране предпросмотра | 08, 12 |
 | `min_meeting_s` | `120` | 08 |
 | `silent_mic_s` | `60` | 10 |
+| `echo_cancel` | `false`: в наушниках гнездо не всегда распознаётся, и PipeWire показывает `[Out] Speaker` | 11 |
 | `user_name` | `Имя Фамилия` | 07 |
 | `glossary_repo` | `~/src/work-repo` | 07 |
 | `app_denylist` | `["org.PulseAudio.pavucontrol"]` (по `application.id`) | 01 |
@@ -155,7 +156,7 @@ queued → processing (worker) → done | error
 
 Worker запускается отдельным процессом под `nice -n 19` в своей группе процессов: `python -m meetrec.process meeting <папка>`. Что делать, решает план из `meta.redo` (`missing`, если пусто) и готовых файлов; `redo` очищается только при `done`, так что упавший посреди `redo --all` worker повторит то же самое. Подкоманды `track <wav> <tsv> <backend>` и `echo <папка>` — дочерние процессы расшифровки и LocalVQE.
 
-1. **LocalVQE**, только если в `meta.json.ports` хоть раз был `[Out] Speaker`. Дорожки обрезаются до общей длины, затем вызывается `localvqe_new(model)` и `localvqe_process_s16(ctx, me, them, n, out)` из `<data_dir>/liblocalvqe.so` через `ctypes`; результат пишется в `me.clean.wav`. Перед `liblocalvqe.so` по пути загружаются `libggml-base.so.0` и `libggml.so.0`. LocalVQE запускается в дочернем процессе (`python -m meetrec.process echo <папка>`): если он упал, даже нативно, берётся исходный `me.wav`, а в `warnings` добавляется запись. В наушниках LocalVQE снижает громкость на 13 дБ и добавляет гул (→ 11), поэтому всегда его не включаем.
+1. **LocalVQE**, только если `echo_cancel = true` и в `meta.json.ports` хоть раз был `[Out] Speaker`. На этой машине гнездо наушников часто не распознаётся: наушники `not available`, звук идёт в `[Out] Speaker` на малой громкости, так что по порту наушники от динамиков не отличить. Дорожки обрезаются до общей длины, затем вызывается `localvqe_new(model)` и `localvqe_process_s16(ctx, me, them, n, out)` из `<data_dir>/liblocalvqe.so` через `ctypes`; результат пишется в `me.clean.wav`. Перед `liblocalvqe.so` по пути загружаются `libggml-base.so.0` и `libggml.so.0`. LocalVQE запускается в дочернем процессе (`python -m meetrec.process echo <папка>`): если он упал, даже нативно, берётся исходный `me.wav`, а в `warnings` добавляется запись. В наушниках LocalVQE снижает громкость на 13 дБ и добавляет гул (→ 11), поэтому всегда его не включаем.
 2. **Расшифровка**: каждая дорожка (`me.clean.wav` или `me.wav`, затем `them.wav`) идёт в своём дочернем процессе. Дорожку без файла или без единого кадра (её `pw-record` умер сразу) worker не расшифровывает: пишет пустой `.tokens.tsv` и запись в `warnings`, вторая дорожка расшифровывается как обычно:
    ```python
    tc.Model(gigaam_path, backend="vulkan").session().run(pcm_f32, language="ru", timestamps="token")

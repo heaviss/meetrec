@@ -12,6 +12,7 @@ class Config:
     pause_s: float = 30
     min_meeting_s: float = 120
     silent_mic_s: int = 60
+    echo_cancel: bool = False
     user_name: str = "Имя Фамилия"
     glossary_repo: Path = Path.home() / "src/work-repo"
     app_denylist: tuple[str, ...] = ("org.PulseAudio.pavucontrol",)
