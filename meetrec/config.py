@@ -9,7 +9,7 @@ CONFIG_PATH = Path.home() / ".config/meetrec/config.toml"
 @dataclass(frozen=True)
 class Config:
     recordings_dir: Path = Path.home() / "Recordings"
-    pause_s: float = 300
+    pause_s: float = 30
     min_meeting_s: float = 120
     silent_mic_s: int = 60
     user_name: str = "Имя Фамилия"
