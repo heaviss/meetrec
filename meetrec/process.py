@@ -65,24 +65,27 @@ def run_stages(meeting: Meeting, redo: str, cfg: Config) -> None:
     have_tokens = all((folder / f"{name}.tokens.tsv").exists() for name in TRACKS)
     steps = plan(redo, have_tokens, (folder / "transcript.md").exists(), meeting.meta["summary_done"])
     if steps.transcribe:
+        meeting.update(stage="transcribe")
         transcribe(me_track(meeting), folder / "me.tokens.tsv")
         transcribe(folder / "them.wav", folder / "them.tokens.tsv")
     if steps.transcript:
         write_transcript(meeting)
     if steps.summary:
+        meeting.update(stage="summary")
         write_summary(meeting, cfg)
 
 
 def process(folder: Path, cfg: Config) -> None:
     meeting = Meeting.load(folder)
     redo = meeting.meta.get("redo") or "missing"
-    meeting.update(status="processing", redo=None, error=None)
+    meeting.update(status="processing", error=None)
     try:
         run_stages(meeting, redo, cfg)
     except Exception as error:
-        meeting.update(status="error", error=f"{type(error).__name__}: {error}")
+        meeting.update(status="error", stage=None, error=f"{type(error).__name__}: {error}")
         raise
-    meeting.update(status="done")
+    # redo is cleared only now: a worker that dies mid-way retries the same stage.
+    meeting.update(status="done", stage=None, redo=None)
 
 
 def main() -> None:

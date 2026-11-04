@@ -60,6 +60,9 @@ class Recorder:
         log.warning("%s lost %.1f s of %s", self.folder.name, lost, track)
         return {"track": track, "at": now_iso(), "lost_s": round(lost, 1)}
 
+    def dead_tracks(self) -> set[str]:
+        return {track for track, proc in self.procs.items() if proc.poll() is not None}
+
     def mic_silent(self, seconds: int) -> bool:
         path = self.folder / "me.wav"
         want = seconds * RATE * SAMPLE_BYTES

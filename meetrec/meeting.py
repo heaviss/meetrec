@@ -1,10 +1,13 @@
 import json
+import logging
 import os
 import struct
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 ACTIVE = frozenset(("recording", "pause", "processing"))
 WAV_HEADER = 44
@@ -53,9 +56,12 @@ class Meeting:
         return (datetime.fromisoformat(stopped) - self.started_at).total_seconds()
 
     def save(self) -> None:
-        staging = self.path / "meta.json.tmp"
-        staging.write_text(json.dumps(self.meta, ensure_ascii=False, indent=1))
-        os.replace(staging, self.path / "meta.json")
+        write_json(self.path / "meta.json", self.meta)
+
+    def checked(self) -> Meeting:
+        """Fail on a meta.json without the one field every listing sorts by."""
+        datetime.fromisoformat(str(self.meta.get("started_at")))
+        return self
 
     def update(self, **fields: Any) -> None:
         self.meta.update(fields)
@@ -81,12 +87,28 @@ def new_meta(now: datetime) -> dict[str, Any]:
         "summary_done": False,
         "error": None,
         "redo": None,
+        "stage": None,
     }
 
 
+def write_json(path: Path, payload: object) -> None:
+    """Write through a temp file, so a reader never sees half a file."""
+    staging = path.with_suffix(".tmp")
+    staging.write_text(json.dumps(payload, ensure_ascii=False, indent=1))
+    os.replace(staging, path)
+
+
+def load_valid(folder: Path) -> Meeting | None:
+    try:
+        return Meeting.load(folder).checked()
+    except OSError, ValueError:
+        log.warning("skipping %s: unreadable meta.json", folder)
+    return None
+
+
 def list_meetings(recordings_dir: Path) -> list[Meeting]:
-    meetings = [Meeting.load(meta.parent) for meta in recordings_dir.glob("*/meta.json")]
-    return sorted(meetings, key=lambda meeting: meeting.started_at)
+    loaded = (load_valid(meta.parent) for meta in recordings_dir.glob("*/meta.json"))
+    return sorted((meeting for meeting in loaded if meeting), key=lambda meeting: meeting.started_at)
 
 
 def repair_wav(path: Path) -> bool:

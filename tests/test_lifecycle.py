@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from meetrec.daemon import Lifecycle
+from meetrec.lifecycle import Lifecycle
 
 PAUSE_S = 30
 MIN_MEETING_S = 120

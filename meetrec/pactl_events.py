@@ -13,6 +13,18 @@ MIC_EVENT = re.compile(r"^Event '(new|remove)' on source-output #\d+$")
 SINK_EVENT = re.compile(r"^Event 'change' on (sink|server) #\S+$")
 
 
+def event_queue() -> queue.Queue[str]:
+    return queue.Queue()
+
+
+def next_event(events: queue.Queue[str]) -> str:
+    """The next pactl event, or a tick once a second so timers run without events."""
+    try:
+        return events.get(timeout=1)
+    except queue.Empty:
+        return "tick"
+
+
 def classify(line: str) -> str | None:
     if MIC_EVENT.match(line):
         return "mic"

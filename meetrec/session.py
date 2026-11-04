@@ -26,25 +26,24 @@ class Session:
     def __init__(self, recordings_dir: Path, streams: list[Stream]) -> None:
         self.meeting = Meeting.create(recordings_dir, datetime.now().astimezone())
         self.recorder = Recorder(self.meeting.path)
-        self.released_at: str | None = None
         self.silent_s = 0
         self.silence_warned = False
+        self.dead_tracks: set[str] = set()
         self.next_silence_check = time.monotonic() + SILENCE_CHECK_S
         apps = ", ".join(sorted({app_label(app_of(stream)) for stream in streams}))
         notify(f"Запись встречи: {apps}")
 
     def pause(self) -> None:
-        self.released_at = now_iso()
-        self.meeting.update(status="pause")
+        """stopped_at is the release moment, kept on disk so a crash during the pause keeps it."""
+        self.meeting.update(status="pause", stopped_at=now_iso())
 
     def resume(self) -> None:
-        self.released_at = None
-        self.meeting.update(status="recording")
+        self.meeting.update(status="recording", stopped_at=None)
 
     def close(self) -> Meeting:
         """The meeting ends when the microphone was released, not when the pause ran out."""
         gaps = self.recorder.stop()
-        self.meeting.update(status="queued", stopped_at=self.released_at or now_iso(), gaps=gaps)
+        self.meeting.update(status="queued", stopped_at=self.meeting.meta["stopped_at"] or now_iso(), gaps=gaps)
         return self.meeting
 
     def close_and_report(self) -> Meeting:
@@ -68,6 +67,12 @@ class Session:
         if port is None or (ports and same_port(ports[-1], port)):
             return
         self.meeting.append("ports", {"at": now_iso(), **port})
+
+    def watch_recorder(self) -> None:
+        for track in self.recorder.dead_tracks() - self.dead_tracks:
+            self.dead_tracks.add(track)
+            notify(f"Запись {track} оборвалась — встреча пишется не полностью")
+            self.meeting.append("warnings", f"pw-record {track} exited at {now_iso()}")
 
     def watch_silence(self, now: float, threshold_s: int) -> None:
         if self.silence_warned or now < self.next_silence_check:
