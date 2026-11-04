@@ -13,7 +13,7 @@ label: wayfinder:map
 - Машина: Ryzen 5 5600H (AVX2), без NVIDIA, 14 ГиБ RAM (свободно ~4,6), PipeWire 1.0.5, Cinnamon/X11, fish; есть `notify-send`, `uv`, `systemd --user`, `claude`.
 - Контекст и альтернативы: `~/src/work-repo/docs/amanu-research.md`.
 - Принятые при постановке рамки:
-  - Python-скрипт через `uv`, демон под `systemd --user`, `pw-record` — подпроцесс; как вызывать `transcribe.cpp` — тикет 09.
+  - Python-скрипт через `uv`, демон под `systemd --user`, `pw-record` — подпроцесс; как вызывать `transcribe.cpp`, решает [Вызывать transcribe.cpp как CLI или через Python-биндинг](09-cli-or-binding.md).
   - Звонок = чужое приложение открыло поток записи с микрофона; конец — поток закрыт дольше 30 с.
   - Пишем сразу, `notify-send` на старте и стопе, встречи короче 2 мин удаляем.
   - `them` = monitor системного вывода целиком (браузер: Meet, Zoom web; приложение Zoom).
