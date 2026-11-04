@@ -1,6 +1,7 @@
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 CONFIG_PATH = Path.home() / ".config/meetrec/config.toml"
 
@@ -10,7 +11,7 @@ class Config:
     recordings_dir: Path = Path.home() / "Recordings"
     pause_s: float = 300
     min_meeting_s: float = 120
-    silent_mic_s: float = 60
+    silent_mic_s: int = 60
     user_name: str = "Имя Фамилия"
     glossary_repo: Path = Path.home() / "src/work-repo"
     app_denylist: tuple[str, ...] = ("org.PulseAudio.pavucontrol",)
@@ -41,15 +42,15 @@ class Config:
         return self.data_dir / "state.json"
 
 
-def load(path: Path = CONFIG_PATH) -> Config:
-    raw = tomllib.loads(path.read_text()) if path.exists() else {}
+def coerce_setting(default: Any, setting: Any) -> Any:
+    if isinstance(default, Path):
+        return Path(setting).expanduser()
+    if isinstance(default, tuple):
+        return tuple(setting)
+    return setting
+
+
+def load_config(path: Path = CONFIG_PATH) -> Config:
+    raw: dict[str, Any] = tomllib.loads(path.read_text()) if path.exists() else {}
     defaults = Config()
-    values = {}
-    for key, value in raw.items():
-        default = getattr(defaults, key)
-        if isinstance(default, Path):
-            value = Path(value).expanduser()
-        elif isinstance(default, tuple):
-            value = tuple(value)
-        values[key] = value
-    return Config(**values)
+    return Config(**{key: coerce_setting(getattr(defaults, key), setting) for key, setting in raw.items()})

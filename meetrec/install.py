@@ -2,25 +2,29 @@ import hashlib
 import logging
 import shutil
 import subprocess
-import urllib.request
 from pathlib import Path
+from types import MappingProxyType
+from urllib.request import urlretrieve
 
 from meetrec.config import Config
 
 log = logging.getLogger(__name__)
 
-MODELS = {
-    "gigaam-v3-e2e-ctc-Q8_0.gguf": (
-        "https://huggingface.co/handy-computer/gigaam-v3-e2e-ctc-gguf/resolve/main/gigaam-v3-e2e-ctc-Q8_0.gguf",
-        "9ccce4750dc813a493d96ca15ee251712bedec15ac9a02fa3d2bd732f08ae5eb",
-    ),
-    "localvqe-v1.4-aec-200K-f32.gguf": (
-        "https://huggingface.co/LocalAI-io/LocalVQE/resolve/main/localvqe-v1.4-aec-200K-f32.gguf",
-        "b6e43138588a83bfe903ab5e143b4020b91c1e1629f5a575ac5855ff0003c731",
-    ),
-}
+MODELS = MappingProxyType(
+    {
+        "gigaam-v3-e2e-ctc-Q8_0.gguf": (
+            "https://huggingface.co/handy-computer/gigaam-v3-e2e-ctc-gguf/resolve/main/gigaam-v3-e2e-ctc-Q8_0.gguf",
+            "9ccce4750dc813a493d96ca15ee251712bedec15ac9a02fa3d2bd732f08ae5eb",
+        ),
+        "localvqe-v1.4-aec-200K-f32.gguf": (
+            "https://huggingface.co/LocalAI-io/LocalVQE/resolve/main/localvqe-v1.4-aec-200K-f32.gguf",
+            "b6e43138588a83bfe903ab5e143b4020b91c1e1629f5a575ac5855ff0003c731",
+        ),
+    }
+)
 LOCALVQE_REPO = "https://github.com/localai-org/LocalVQE.git"
 LOCALVQE_COMMIT = "7f61cd0"
+CMAKE = ("uvx", "cmake")
 OLD_CACHE = Path.home() / ".cache/meetrec"
 UNIT_PATH = Path.home() / ".config/systemd/user/meetrec.service"
 UNIT = """\
@@ -40,8 +44,8 @@ WantedBy=default.target
 
 
 def sha256(path: Path) -> str:
-    with open(path, "rb") as f:
-        return hashlib.file_digest(f, "sha256").hexdigest()
+    with open(path, "rb") as model_file:
+        return hashlib.file_digest(model_file, "sha256").hexdigest()
 
 
 def install_model(name: str, url: str, digest: str, models_dir: Path) -> None:
@@ -54,18 +58,15 @@ def install_model(name: str, url: str, digest: str, models_dir: Path) -> None:
         shutil.move(old, dest)
         return
     log.info("downloading %s", url)
-    tmp = dest.with_suffix(".part")
-    urllib.request.urlretrieve(url, tmp)
-    if sha256(tmp) != digest:
-        tmp.unlink()
+    partial = dest.with_suffix(".part")
+    urlretrieve(url, partial)
+    if sha256(partial) != digest:
+        partial.unlink()
         raise RuntimeError(f"sha256 mismatch for {name}")
-    tmp.rename(dest)
+    partial.rename(dest)
 
 
-def install_localvqe(cfg: Config) -> None:
-    if cfg.localvqe_lib.exists():
-        return
-    src = cfg.localvqe_src
+def fetch_localvqe(src: Path) -> None:
     if not src.exists():
         old = OLD_CACHE / "src/LocalVQE"
         if old.exists():
@@ -75,15 +76,20 @@ def install_localvqe(cfg: Config) -> None:
             subprocess.run(["git", "clone", "--recursive", LOCALVQE_REPO, str(src)], check=True)
     subprocess.run(["git", "-C", str(src), "checkout", LOCALVQE_COMMIT], check=True)
     subprocess.run(["git", "-C", str(src), "submodule", "update", "--init", "--recursive"], check=True)
+
+
+def build_localvqe(src: Path) -> None:
+    configure = ("-S", "ggml", "-B", "ggml/build", "-DCMAKE_BUILD_TYPE=Release", "-DLOCALVQE_BUILD_SHARED=ON")
+    subprocess.run([*CMAKE, *configure], cwd=src, check=True)
+    subprocess.run([*CMAKE, "--build", "ggml/build", "-j6", "--target", "localvqe_shared"], cwd=src, check=True)
+
+
+def install_localvqe(cfg: Config) -> None:
     if cfg.localvqe_lib.exists():
         return
-    build = ["uvx", "cmake"]
-    subprocess.run(
-        [*build, "-S", "ggml", "-B", "ggml/build", "-DCMAKE_BUILD_TYPE=Release", "-DLOCALVQE_BUILD_SHARED=ON"],
-        cwd=src,
-        check=True,
-    )
-    subprocess.run([*build, "--build", "ggml/build", "-j6", "--target", "localvqe_shared"], cwd=src, check=True)
+    fetch_localvqe(cfg.localvqe_src)
+    if not cfg.localvqe_lib.exists():
+        build_localvqe(cfg.localvqe_src)
 
 
 def install_unit() -> None:

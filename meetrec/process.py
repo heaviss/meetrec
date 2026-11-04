@@ -1,90 +1,85 @@
 """Worker: python -m meetrec.process meeting <folder> | track <wav> <tsv> <backend>"""
 
-import array
-import ctypes
 import logging
 import subprocess
 import sys
-import wave
 from pathlib import Path
+from typing import Literal
 
-from meetrec import config, transcript
-from meetrec.config import Config
+import transcribe_cpp
+
+from meetrec import transcript
+from meetrec.audio import as_float_pcm, read_s16
+from meetrec.config import Config, load_config
+from meetrec.echo import me_track
 from meetrec.meeting import Meeting
 from meetrec.summary import summarize
 
 log = logging.getLogger(__name__)
-SPEAKER_PORT_SUFFIX = "Speaker"
+
+Backend = Literal["vulkan", "cpu"]
+BACKENDS: tuple[Backend, ...] = ("vulkan", "cpu")
+CPU_THREADS = 4
+TRACKS = ("me", "them")
 
 
-def read_s16(path: Path) -> array.array:
-    with wave.open(str(path)) as w:
-        assert (w.getframerate(), w.getnchannels(), w.getsampwidth()) == (16000, 1, 2), path
-        return array.array("h", w.readframes(w.getnframes()))
+def parse_backend(name: str) -> Backend:
+    for backend in BACKENDS:
+        if backend == name:
+            return backend
+    raise ValueError(f"unknown backend {name}")
 
 
-def write_s16(path: Path, samples: array.array) -> None:
-    with wave.open(str(path), "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(16000)
-        w.writeframes(samples.tobytes())
-
-
-def cancel_echo(folder: Path, cfg: Config) -> Path:
-    me, them = read_s16(folder / "me.wav"), read_s16(folder / "them.wav")
-    n = min(len(me), len(them))
-    me, them = me[:n], them[:n]
-    # The build bakes its own directory into RUNPATH; load the deps by path so a moved build still works.
-    for dep in ("libggml-base.so.0", "libggml.so.0"):
-        ctypes.CDLL(str(cfg.localvqe_lib.parent / dep), mode=ctypes.RTLD_GLOBAL)
-    lib = ctypes.CDLL(str(cfg.localvqe_lib))
-    lib.localvqe_new.restype = ctypes.c_void_p
-    lib.localvqe_last_error.restype = ctypes.c_char_p
-    ctx = ctypes.c_void_p(lib.localvqe_new(str(cfg.localvqe_model).encode()))
-    if not ctx.value:
-        raise RuntimeError("localvqe_new failed")
-    out = array.array("h", bytes(2 * n))
-    buf = lambda a: (ctypes.c_int16 * n).from_buffer(a)  # noqa: E731
-    try:
-        if lib.localvqe_process_s16(ctx, buf(me), buf(them), n, buf(out)) != 0:
-            raise RuntimeError(lib.localvqe_last_error(ctx).decode())
-    finally:
-        lib.localvqe_free(ctx)
-    write_s16(folder / "me.clean.wav", out)
-    return folder / "me.clean.wav"
-
-
-def me_track(meeting: Meeting, cfg: Config) -> Path:
-    if not any(p["port"] and p["port"].endswith(SPEAKER_PORT_SUFFIX) for p in meeting.meta["ports"]):
-        return meeting.path / "me.wav"
-    try:
-        return cancel_echo(meeting.path, cfg)
-    except Exception as e:
-        log.exception("LocalVQE failed, transcribing the raw me.wav")
-        meeting.update(warnings=[*meeting.meta["warnings"], f"LocalVQE failed: {e}"])
-        return meeting.path / "me.wav"
-
-
-def transcribe_track(wav: Path, tsv: Path, backend: str, cfg: Config) -> None:
-    import transcribe_cpp as tc  # noqa: PLC0415 heavy native lib, loaded only in the track child
-
-    pcm = array.array("f", (x / 32768 for x in read_s16(wav)))
-    model = tc.Model(str(cfg.gigaam_model), backend=backend)
-    session = model.session(n_threads=4) if backend == "cpu" else model.session()
-    result = session.run(pcm, language="ru", timestamps="token")
-    transcript.write_tokens(tsv, [(t.t0_ms, t.t1_ms, t.text) for t in result.tokens])
+def transcribe_track(wav: Path, tsv: Path, backend: Backend, cfg: Config) -> None:
+    model = transcribe_cpp.Model(str(cfg.gigaam_model), backend=backend)
+    session = model.session(n_threads=CPU_THREADS) if backend == "cpu" else model.session()
+    recognized = session.run(as_float_pcm(read_s16(wav)), language="ru", timestamps="token")
+    transcript.write_tokens(tsv, [(token.t0_ms, token.t1_ms, token.text) for token in recognized.tokens])
 
 
 def transcribe(wav: Path, tsv: Path) -> None:
-    for backend in ("vulkan", "cpu"):
-        if (
-            subprocess.run([sys.executable, "-m", "meetrec.process", "track", str(wav), str(tsv), backend]).returncode
-            == 0
-        ):
+    for backend in BACKENDS:
+        child = subprocess.run([sys.executable, "-m", "meetrec.process", "track", str(wav), str(tsv), backend])
+        if child.returncode == 0:
             return
         log.warning("transcription of %s on %s failed", wav, backend)
     raise RuntimeError(f"transcription failed: {wav.name}")
+
+
+def ensure_tokens(meeting: Meeting, redo: str, cfg: Config) -> bool:
+    tokens = [meeting.path / f"{track}.tokens.tsv" for track in TRACKS]
+    if redo != "all" and all(path.exists() for path in tokens):
+        return False
+    transcribe(me_track(meeting, cfg), tokens[0])
+    transcribe(meeting.path / "them.wav", tokens[1])
+    return True
+
+
+def ensure_transcript(meeting: Meeting, rebuild: bool) -> None:
+    path = meeting.path / "transcript.md"
+    if path.exists() and not rebuild:
+        return
+    tracks = [transcript.phrases(transcript.read_tokens(meeting.path / f"{name}.tokens.tsv"), name) for name in TRACKS]
+    path.write_text(transcript.render(meeting.started_at, meeting.duration_s, *tracks))
+    meeting.update(summary_done=False)
+
+
+def ensure_summary(meeting: Meeting, cfg: Config) -> None:
+    if meeting.meta["summary_done"]:
+        return
+    try:
+        summary = summarize((meeting.path / "transcript.md").read_text(), cfg)
+    except OSError, subprocess.SubprocessError, RuntimeError:
+        log.exception("summary failed for %s", meeting.path)
+        return
+    (meeting.path / "summary.md").write_text(summary)
+    meeting.update(summary_done=True)
+
+
+def run_stages(meeting: Meeting, redo: str, cfg: Config) -> None:
+    rebuilt = ensure_tokens(meeting, redo, cfg)
+    ensure_transcript(meeting, rebuilt or redo == "transcript")
+    ensure_summary(meeting, cfg)
 
 
 def process(folder: Path, cfg: Config) -> None:
@@ -92,39 +87,21 @@ def process(folder: Path, cfg: Config) -> None:
     redo = meeting.meta.get("redo") or "missing"
     meeting.update(status="processing", redo=None, error=None)
     try:
-        tokens = {name: folder / f"{name}.tokens.tsv" for name in ("me", "them")}
-        rebuild = redo == "all" or not all(p.exists() for p in tokens.values())
-        if rebuild:
-            transcribe(me_track(meeting, cfg), tokens["me"])
-            transcribe(folder / "them.wav", tokens["them"])
-        if rebuild or redo == "transcript" or not (folder / "transcript.md").exists():
-            text = transcript.render(
-                meeting.started_at,
-                meeting.duration_s,
-                *(transcript.phrases(transcript.read_tokens(p), name) for name, p in tokens.items()),
-            )
-            (folder / "transcript.md").write_text(text)
-            meeting.update(summary_done=False)
-        if not meeting.meta["summary_done"]:
-            try:
-                (folder / "summary.md").write_text(summarize((folder / "transcript.md").read_text(), cfg))
-                meeting.update(summary_done=True)
-            except Exception:
-                log.exception("summary failed for %s", folder)
-        meeting.update(status="done")
-    except Exception as e:
-        meeting.update(status="error", error=f"{type(e).__name__}: {e}")
+        run_stages(meeting, redo, cfg)
+    except Exception as error:
+        meeting.update(status="error", error=f"{type(error).__name__}: {error}")
         raise
+    meeting.update(status="done")
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    cfg = config.load()
+    cfg = load_config()
     match sys.argv[1:]:
         case ["meeting", folder]:
             process(Path(folder), cfg)
         case ["track", wav, tsv, backend]:
-            transcribe_track(Path(wav), Path(tsv), backend, cfg)
+            transcribe_track(Path(wav), Path(tsv), parse_backend(backend), cfg)
         case _:
             sys.exit(__doc__)
 

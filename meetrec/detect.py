@@ -4,66 +4,80 @@ import os
 import queue
 import re
 import subprocess
+import threading
 import time
+from types import MappingProxyType
+from typing import Any
 
 log = logging.getLogger(__name__)
 
 # Without LC_ALL=C pactl localizes events, and `pactl -f json` fails on non-ASCII.
-C_ENV = {**os.environ, "LC_ALL": "C"}
+C_ENV = MappingProxyType({**os.environ, "LC_ALL": "C"})
 EVENT = re.compile(r"^Event '(new|remove|change)' on (source-output|sink|server)\b")
+NOT_A_MONITOR = frozenset((None, "", "n/a"))
+OWN_APP = "meetrec"
+
+Stream = dict[str, Any]
 
 
-def pactl_json(*args: str) -> list[dict]:
+def pactl_json(*args: str) -> list[Stream]:
     out = subprocess.run(["pactl", "-f", "json", *args], capture_output=True, text=True, check=True, env=C_ENV)
-    return json.loads(out.stdout)
+    parsed: list[Stream] = json.loads(out.stdout)
+    return parsed
 
 
-def foreign_mic_streams(outputs: list[dict], sources: list[dict], denylist: tuple[str, ...]) -> list[dict]:
-    monitors = {
-        s["index"]
-        for s in sources
-        if s["name"].endswith(".monitor") or s.get("monitor_of_sink") not in (None, "", "n/a")
-    }
-    return [
-        o
-        for o in outputs
-        if o["source"] not in monitors
-        and o["properties"].get("application.name") != "meetrec"
-        and o["properties"].get("application.id") not in denylist
-    ]
+def is_monitor(source: Stream) -> bool:
+    return source["name"].endswith(".monitor") or source.get("monitor_of_sink") not in NOT_A_MONITOR
 
 
-def mic_streams(denylist: tuple[str, ...]) -> list[dict]:
+def is_foreign(stream: Stream, monitors: set[int], denylist: tuple[str, ...]) -> bool:
+    props = stream["properties"]
+    if stream["source"] in monitors or props.get("application.name") == OWN_APP:
+        return False
+    return props.get("application.id") not in denylist
+
+
+def foreign_mic_streams(outputs: list[Stream], sources: list[Stream], denylist: tuple[str, ...]) -> list[Stream]:
+    monitors = {source["index"] for source in sources if is_monitor(source)}
+    return [stream for stream in outputs if is_foreign(stream, monitors, denylist)]
+
+
+def mic_streams(denylist: tuple[str, ...]) -> list[Stream]:
     return foreign_mic_streams(pactl_json("list", "source-outputs"), pactl_json("list", "sources"), denylist)
 
 
-def app_of(stream: dict) -> dict:
+def app_of(stream: Stream) -> dict[str, str | None]:
     props = stream["properties"]
     return {"binary": props.get("application.process.binary"), "name": props.get("application.name")}
 
 
-def default_port() -> dict | None:
-    name = subprocess.run(["pactl", "get-default-sink"], capture_output=True, text=True, env=C_ENV).stdout.strip()
-    sink = next((s for s in pactl_json("list", "sinks") if s["name"] == name), None)
-    return {"sink": name, "port": sink.get("active_port")} if sink else None
+def default_port() -> dict[str, str | None] | None:
+    get_default = subprocess.run(["pactl", "get-default-sink"], capture_output=True, text=True, env=C_ENV)
+    name = get_default.stdout.strip()
+    sink = next((sink for sink in pactl_json("list", "sinks") if sink["name"] == name), None)
+    if sink is None:
+        return None
+    return {"sink": name, "port": sink.get("active_port")}
 
 
 def classify(line: str) -> str | None:
-    if not (m := EVENT.match(line)):
+    match = EVENT.match(line)
+    if match is None:
         return None
-    action, facility = m.groups()
+    action, facility = match.groups()
     if facility == "source-output":
-        return "mic" if action != "change" else None
+        return None if action == "change" else "mic"
     return "sink" if action == "change" else None
 
 
-def subscribe(events: queue.Queue) -> None:
-    while True:
+def subscribe(events: queue.Queue[str], stop: threading.Event) -> None:
+    while not stop.is_set():
         with subprocess.Popen(["pactl", "subscribe"], stdout=subprocess.PIPE, text=True, env=C_ENV) as proc:
-            for line in proc.stdout:
-                if kind := classify(line.strip()):
+            for line in proc.stdout or ():
+                kind = classify(line.strip())
+                if kind:
                     events.put(kind)
-        log.warning("pactl subscribe exited with %s, resubscribing", proc.returncode)
+            log.warning("pactl subscribe exited with %s, resubscribing", proc.wait())
         events.put("mic")
         events.put("sink")
         time.sleep(1)
