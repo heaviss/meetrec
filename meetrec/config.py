@@ -7,6 +7,18 @@ from types import MappingProxyType
 from typing import Any
 
 CONFIG_PATH = Path.home() / ".config/meetrec/config.toml"
+PROMPT_FILE = "{prompt_file}"
+CLAUDE = (
+    "claude",
+    "-p",
+    "--no-session-persistence",
+    "--tools",
+    "",
+    "--setting-sources",
+    "project",
+    "--system-prompt-file",
+    PROMPT_FILE,
+)
 ASR_MODELS = MappingProxyType({"ru": "gigaam-v3-e2e-ctc-Q8_0.gguf", "en": "parakeet-tdt-0.6b-v2-Q8_0.gguf"})
 
 
@@ -25,6 +37,8 @@ class Config:
     echo_cancel: bool = False
     user_name: str = field(default_factory=default_user_name)
     glossary_repo: Path | None = None
+    summary_command: tuple[str, ...] = CLAUDE
+    summary_timeout_s: float = 900
     language: str = "ru"
     app_denylist: tuple[str, ...] = ("org.PulseAudio.pavucontrol",)
     data_dir: Path = Path.home() / ".local/share/meetrec"

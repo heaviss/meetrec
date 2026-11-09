@@ -2,13 +2,13 @@
 
 A Linux daemon that records your calls by itself and transcribes them on your machine.
 
-A call starts when a browser or Zoom takes the microphone. The daemon records two tracks: `me` is your microphone, `them` is everything the computer plays. When the call is over, a local speech model transcribes both tracks, and `claude -p` writes a summary with decisions and tasks.
+A call starts when a browser or Zoom takes the microphone. The daemon records two tracks: `me` is your microphone, `them` is everything the computer plays. When the call is over, a local speech model transcribes both tracks, and a summarizer (`claude -p` by default, any command you configure) writes a summary with decisions and tasks.
 
 How it works and why: [SPEC.md](wayfinder/SPEC.md) (in Russian), terms in [GLOSSARY.md](GLOSSARY.md).
 
 ## Privacy
 
-Audio never leaves your machine: recording and transcription are local. The transcript text is sent to Anthropic through your own `claude` CLI to write the summary. Without `claude` in `PATH`, meetrec skips the summary and keeps only the local transcript.
+Audio never leaves your machine: recording and transcription are local. The transcript text goes to the summarizer: by default your own `claude` CLI, which sends it to Anthropic. Point `summary_command` at a local model to keep the text on your machine too. Without the summarizer in `PATH`, meetrec skips the summary and keeps only the local transcript.
 
 ## Languages
 
@@ -23,7 +23,7 @@ Meetings that mix languages are not supported, and the language is not detected 
 
 - Linux with PipeWire: `pactl`, `pw-record`, `notify-send`;
 - [`uv`](https://docs.astral.sh/uv/);
-- [`claude`](https://docs.anthropic.com/en/docs/claude-code), logged in, for summaries (optional).
+- [`claude`](https://docs.anthropic.com/en/docs/claude-code), logged in, for summaries (optional; or any other summarizer, see [Configure](#configure)).
 
 For echo cancellation (`echo_cancel = true`) also `git` and `g++`: `meetrec setup` builds [LocalVQE](https://github.com/localai-org/LocalVQE).
 
@@ -83,6 +83,15 @@ glossary_repo = "~/src/work-repo" # a git repo whose GLOSSARY*.md files help the
 ```
 
 `glossary_repo` adds every `GLOSSARY-MAP.md` and `*GLOSSARY.md` tracked in that repo to the summary input. Without it the summary has no glossary.
+
+`summary_command` replaces `claude` with any command that reads the meeting on stdin and prints the summary to stdout. `{prompt_file}` in its arguments becomes the path to the system prompt; without it the prompt is put ahead of the transcript on stdin. `[]` turns summaries off.
+
+```toml
+summary_command = ["ollama", "run", "qwen3:14b"]
+summary_timeout_s = 3600          # local models are slower; the default is 900
+```
+
+A local summarizer is not paused when a new call starts, so it shares the GPU and CPU with the call.
 
 After editing: `systemctl --user restart meetrec`.
 

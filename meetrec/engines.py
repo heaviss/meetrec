@@ -14,7 +14,7 @@ from pathlib import Path
 from meetrec.asr import BACKENDS, parse_backend, require_model, transcribe_track
 from meetrec.config import Config, load_config
 from meetrec.echo import cancel_echo
-from meetrec.summary import claude_available, summarize
+from meetrec.summary import summarize, summarizer_available
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class Engines:
         return cls(
             transcribe=partial(transcribe_in_child, cfg),
             clean_me=clean_me_in_child,
-            summarize=partial(summarize_with_claude, cfg),
+            summarize=partial(summarize_if_available, cfg),
         )
 
 
@@ -65,8 +65,8 @@ def clean_me_in_child(mic: Path, ref: Path, out: Path) -> None:
         raise RuntimeError(f"exit code {returncode}")
 
 
-def summarize_with_claude(cfg: Config, transcript: str, language: str) -> str | None:
-    if not claude_available():
+def summarize_if_available(cfg: Config, transcript: str, language: str) -> str | None:
+    if not summarizer_available(cfg.summary_command):
         return None
     return summarize(transcript, cfg, language)
 

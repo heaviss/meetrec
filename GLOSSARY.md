@@ -30,6 +30,9 @@ The text of a meeting, with each line marked as `me` or `them` and timestamped.
 **Summary**:
 A short write-up of a meeting made from its transcript.
 
+**Summarizer**:
+The command, `claude` unless the user names another, that turns a transcript into a summary.
+
 **Meeting duration**:
 From the start of a meeting until the microphone was last released; the pause after that does not count.
 _Avoid_: call length, recording length

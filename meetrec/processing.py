@@ -12,7 +12,7 @@ from meetrec.notify import notify
 log = logging.getLogger(__name__)
 
 NICE = ("nice", "-n", "19")
-BASE_BUDGET_S = 1800
+BASE_BUDGET_S = 900  # plus the summarizer's timeout and the meeting duration
 
 
 def outcome(meeting: Meeting) -> str:
@@ -28,8 +28,9 @@ def outcome(meeting: Meeting) -> str:
 class Processing:
     """FIFO of closed meetings and the one worker process that handles them."""
 
-    def __init__(self, min_meeting_s: float) -> None:
+    def __init__(self, min_meeting_s: float, summary_timeout_s: float = 900) -> None:
         self.min_meeting_s = min_meeting_s
+        self.summary_timeout_s = summary_timeout_s
         self.pending: deque[Path] = deque()
         self.worker: subprocess.Popen[bytes] | None = None
         self.current: Path | None = None
@@ -75,7 +76,7 @@ class Processing:
         log.info("processing %s", path)
         self.current = path
         self.run_s = 0
-        self.budget_s = BASE_BUDGET_S + Meeting.load(path).duration_s
+        self.budget_s = BASE_BUDGET_S + self.summary_timeout_s + Meeting.load(path).duration_s
         command = [*NICE, sys.executable, "-m", "meetrec.process", "meeting", str(path)]
         # Own process group, so suspend() stops the transcription children too.
         self.worker = subprocess.Popen(command, start_new_session=True)
@@ -87,8 +88,8 @@ class Processing:
     def suspend(self) -> None:
         """A call started: keep the iGPU and CPU for it until the meeting is over.
 
-        The summary stage only waits on the network, and its claude timeout would keep
-        running while stopped, so a worker in that stage is left alone.
+        The summarizer's timeout would keep running while stopped, so a worker in the summary
+        stage is left alone, even when a local summarizer competes with the call.
         """
         if self.current is None or Meeting.load(self.current).stage == "summary":
             return

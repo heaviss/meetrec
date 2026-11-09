@@ -11,7 +11,7 @@
 - две дорожки;
 - расшифровка на русском или английском, один язык на встречу;
 - подавление эха только при динамиках и только с `echo_cancel = true`;
-- транскрипт и саммари через `claude -p`;
+- транскрипт и саммари через summarizer — команду из конфига, по умолчанию `claude -p`;
 - `status` / `redo` / `setup`.
 
 Не входит:
@@ -39,12 +39,12 @@ meetrec/
   watcher.py            # pactl snapshots → Lifecycle → Session: starts, closes, discards meetings
   daemon.py             # event loop: pactl snapshots, signals, processing, state.json
   process.py            # worker: stage plan → LocalVQE → ASR → tokens.tsv → transcript.md → summary.md
-  engines.py            # Engines seam: ASR and LocalVQE in child processes, claude; the children's entry point
+  engines.py            # Engines seam: ASR and LocalVQE in child processes, the summarizer; the children's entry point
   asr.py                # GigaAM / Parakeet via transcribe-cpp
   echo.py               # LocalVQE via ctypes
   audio.py              # 16 kHz mono s16 WAV I/O, WAV header repair
   transcript.py         # tokens → phrase lines → transcript.md
-  summary.py            # prompt + claude -p
+  summary.py            # prompt + summarizer
   install.py            # meetrec setup
   prompt.md             # summary prompt
 tests/                  # one small test per non-trivial logic, see §11
@@ -66,6 +66,8 @@ tests/                  # one small test per non-trivial logic, see §11
 | `language` | `ru`: язык речи на встречах, `ru` или `en`. Выбирает модель, язык саммари и модель, которую качает `setup`. Смешанные встречи не поддерживаются, язык сам не определяется | [public-release 06](../.scratch/public-release/06-language-choice.md) |
 | `user_name` | полное имя из поля GECOS (`pwd`, до первой запятой), если пусто — логин | 07 |
 | `glossary_repo` | нет: без него саммари идёт без словаря | 07 |
+| `summary_command` | `["claude", "-p", "--no-session-persistence", "--tools", "", "--setting-sources", "project", "--system-prompt-file", "{prompt_file}"]`: summarizer, argv без shell. `[]` выключает саммари | 07 |
+| `summary_timeout_s` | `900` | 07 |
 | `app_denylist` | `["org.PulseAudio.pavucontrol"]` (по `application.id`) | 01 |
 | `data_dir` | `~/.local/share/meetrec` | 14 |
 
@@ -101,7 +103,7 @@ tests/                  # one small test per non-trivial logic, see §11
 }
 ```
 
-`language` worker берёт из конфига при первой обработке, `redo --language` его меняет. `summary_skipped: true` — `claude` не нашёлся в `PATH`.
+`language` worker берёт из конфига при первой обработке, `redo --language` его меняет. `summary_skipped: true` — summarizer не нашёлся в `PATH` или `summary_command` пуст.
 
 `status` — единственный источник правды о состоянии. Запись идёт атомарно: во временный файл, затем `os.replace`.
 
@@ -145,7 +147,7 @@ queued → processing (worker) → done | error
 - **Длительность встречи** — от старта до момента, когда микрофон освободили в последний раз (`stopped_at`), без хвоста Паузы. Момент освобождения пишется в `stopped_at` сразу при переходе в Паузу и стирается при возврате в Запись, так что падение в Паузе его не теряет. У встречи, упавшей в Записи, `stopped_at` = `started_at` + длина `me.wav`.
 - Одна встреча пишется в каждый момент времени. Если звонок начался во время Паузы, это продолжение той же встречи.
 - Уведомления `notify-send`: старт записи, стоп с длительностью, саммари готово с путём к `summary.md`, ошибка, молчащий микрофон. Удаление короткой встречи проходит без уведомления.
-- Очередь обработки: FIFO, по одной встрече. Пока идёт Запись или Пауза, worker не запускается. Если звонок начался во время обработки, группа процессов worker'а получает `SIGSTOP` и `SIGCONT` после закрытия встречи: iGPU и CPU остаются звонку. Исключение — этап `summary` (`meta.stage`): он ждёт только сеть, а таймаут `claude` шёл бы и во время остановки. У worker'а есть бюджет `1800 с + длительность встречи` по времени работы без остановок; превысил — `SIGKILL` группе и `error`. Worker, вышедший с ненулевым кодом в `queued` или `processing`, тоже ставит встрече `error`.
+- Очередь обработки: FIFO, по одной встрече. Пока идёт Запись или Пауза, worker не запускается. Если звонок начался во время обработки, группа процессов worker'а получает `SIGSTOP` и `SIGCONT` после закрытия встречи: iGPU и CPU остаются звонку. Исключение — этап `summary` (`meta.stage`): таймаут summarizer'а шёл бы и во время остановки. Локальный summarizer поэтому делит iGPU и CPU с новым звонком. У worker'а есть бюджет `900 с + summary_timeout_s + длительность встречи` (по умолчанию `1800 с + длительность`) по времени работы без остановок; превысил — `SIGKILL` группе и `error`. Worker, вышедший с ненулевым кодом в `queued` или `processing`, тоже ставит встрече `error`.
 - Сбой `pactl` (не запустился, упал, битый JSON) не роняет демон: остаётся прежний снимок, ошибка — в журнал. Упавшая подписка перезапускается через секунду, снимки — после этой секунды.
 - Если `echo_cancel = true`, а библиотеки или модели LocalVQE нет, демон при старте шлёт одно уведомление «эхо не подавляется: запустите meetrec setup» и пишет `me.wav` как есть.
 - `SIGUSR1` только ставит флаг пересканирования: `queue.Queue` нереентерабелен, обработчик сигнала его не трогает.
@@ -186,7 +188,7 @@ Worker запускается отдельным процессом под `nice
      ```
    - Текст идёт как распознан, без чистки.
 4. **Саммари** (`summary.py`) → 07:
-   - Вызов: `claude -p --no-session-persistence --tools "" --setting-sources project --system-prompt-file meetrec/prompt.md` из временной папки, вход через stdin:
+   - Вызов: `summary_command` из временной папки, вход через stdin, `summary.md` — его stdout. `{prompt_file}` в аргументах заменяется путём к файлу с системным промптом; если в команде его нет, системный промпт идёт в начало stdin перед `<glossary>`. По умолчанию — `claude -p --no-session-persistence --tools "" --setting-sources project --system-prompt-file {prompt_file}`. Таймаут — `summary_timeout_s`. Вход:
      ```
      <glossary>
      ### <path>
@@ -199,8 +201,8 @@ Worker запускается отдельным процессом под `nice
      ```
    - Системный промпт — `meetrec/prompt.md`, по-английски. `{user_name}` подставляется из конфига, `{language}` — название языка встречи: саммари пишется на нём. Русская версия проверена на встрече 2 ноября, ветка `prototype/summary`.
    - Без `glossary_repo` блока `<glossary>` нет.
-   - Если `claude` нет в `PATH`, саммари пропускается: `summary_skipped: true`, `status` такую встречу не показывает.
-   - Если `claude` упал, встреча всё равно получает `done`, но с `summary_done: false`, и приходит уведомление.
+   - Если первого слова `summary_command` нет в `PATH` или команда пуста, саммари пропускается: `summary_skipped: true`, `status` такую встречу не показывает.
+   - Если summarizer упал (ненулевой код, таймаут, пустой stdout), встреча всё равно получает `done`, но с `summary_done: false`, и приходит уведомление.
 
 ## 10. CLI → 13, 14
 
@@ -247,7 +249,7 @@ Worker запускается отдельным процессом под `nice
 - `pactl`: чужие микрофонные потоки (monitor, `meetrec` и pavucontrol отсекаются), классификация строк `pactl subscribe`; через `Pactl.notice`/`next` с поддельным `pactl` — событие микрофона обновляет только потоки, событие sink — порт, тик ничего не спрашивает, упавший снимок оставляет прежний.
 - `lifecycle`: таймлайн событий переводится в нужные действия. Время инжектится, без `sleep`.
 - `watcher`: сценарии с поддельным recorder и `notify` — запись, пауза, возврат, закрытие; короткая встреча удаляется; приложения и порт пишутся в `meta.json`; мёртвый трек и молчащий микрофон дают по одному уведомлению; остановка демона закрывает или удаляет встречу и не сообщает об убитых ею `pw-record`.
-- `process`: сценарии с поддельными `Engines` — `missing` / `transcript` / `all` запускают только свои этапы; пустой трек; откат с LocalVQE на сырой `me.wav`; нет `claude` или он упал; упавшая расшифровка даёт `error` и сохраняет `redo`.
+- `process`: сценарии с поддельными `Engines` — `missing` / `transcript` / `all` запускают только свои этапы; пустой трек; откат с LocalVQE на сырой `me.wav`; нет summarizer'а или он упал; упавшая расшифровка даёт `error` и сохраняет `redo`.
 - `meeting`: переходы статусов, `redo` не трогает активную встречу, `outcome`; восстановление после падения — `recording` уходит в `queued` с длительностью по `me.wav`, упавшая в Паузе сохраняет момент освобождения, короткая удаляется; битый `meta.json` пропускается.
 - `processing`: worker, умерший до начала работы, даёт `error`; `SIGSTOP` не трогает этап `summary`; бюджет считает только время работы.
 - `audio`: заголовок WAV, обрезанный как после `SIGKILL`, чинится, и `wave.open` читает верное число кадров.

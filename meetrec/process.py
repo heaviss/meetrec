@@ -66,7 +66,7 @@ def write_summary(meeting: Meeting, summarize: Summarize) -> None:
         log.exception("summary failed for %s", meeting.path)
         return
     if summary is None:
-        log.info("no claude in PATH, skipping the summary of %s", meeting.path)
+        log.info("no summarizer in PATH, skipping the summary of %s", meeting.path)
         meeting.summary_skipped()
         return
     meeting.summary.write_text(summary)
