@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import os
 import subprocess
 from pathlib import Path
 from types import MappingProxyType
@@ -30,7 +31,7 @@ LOCALVQE_REPO = "https://github.com/localai-org/LocalVQE.git"
 LOCALVQE_COMMIT = "7f61cd0"
 CMAKE = ("uvx", "cmake")
 UNIT_PATH = Path.home() / ".config/systemd/user/meetrec.service"
-UNIT = """\
+UNIT_TEMPLATE = """\
 [Unit]
 Description=meetrec: record, transcribe and summarize calls
 After=pipewire.service pipewire-pulse.service
@@ -38,6 +39,7 @@ After=pipewire.service pipewire-pulse.service
 [Service]
 ExecStart=%h/.local/bin/meetrec run
 Environment=PYTHONUNBUFFERED=1
+Environment="PATH={path}"
 Restart=on-failure
 KillMode=control-group
 
@@ -85,10 +87,17 @@ def install_localvqe(cfg: Config) -> None:
         build_localvqe(cfg.localvqe_src)
 
 
+def unit(path: str) -> str:
+    """The setup shell's PATH: at boot systemd gives user services only the system one, without ~/.local/bin."""
+    # ponytail: escapes only systemd's %; a PATH with quotes or backslashes would need them escaped too
+    return UNIT_TEMPLATE.format(path=path.replace("%", "%%"))
+
+
 def install_unit() -> None:
+    text = unit(os.environ.get("PATH", os.defpath))
     UNIT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if not UNIT_PATH.exists() or UNIT_PATH.read_text() != UNIT:
-        UNIT_PATH.write_text(UNIT)
+    if not UNIT_PATH.exists() or UNIT_PATH.read_text() != text:
+        UNIT_PATH.write_text(text)
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
     subprocess.run(["systemctl", "--user", "enable", "--now", "meetrec"], check=True)
 

@@ -233,11 +233,13 @@ Worker запускается отдельным процессом под `nice
      [Service]
      ExecStart=%h/.local/bin/meetrec run
      Environment=PYTHONUNBUFFERED=1
+     Environment="PATH=<PATH, с которым запущен setup>"
      Restart=on-failure
      KillMode=control-group
      [Install]
      WantedBy=default.target
      ```
+     `PATH` берётся из окружения `setup`: при загрузке systemd даёт пользовательским сервисам только системный `PATH`, и summarizer из `~/.local/bin` не находится. Переставили summarizer в другое место — `setup` запускают заново.
 - Установка: `uv tool install git+https://github.com/heaviss/meetrec --python 3.14`, затем `meetrec setup`. Для разработки — `uv tool install --editable . --python 3.14` из клона.
 - Обновление: `uv tool upgrade meetrec`, затем `meetrec setup` и `systemctl --user restart meetrec`. После смены `transcribe-cpp` прогнать `meetrec redo --all` на эталонной встрече `~/Recordings/bench` и сверить качество.
 - Логи демона идут в stdout и попадают в journald (`journalctl --user -u meetrec`).

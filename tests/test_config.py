@@ -3,7 +3,7 @@ import pwd
 import pytest
 
 from meetrec.config import Config, default_user_name
-from meetrec.install import wanted_models
+from meetrec.install import unit, wanted_models
 
 
 def passwd_entry(gecos: str) -> pwd.struct_passwd:
@@ -31,3 +31,7 @@ def test_setup_fetches_only_needed_models(language: str, echo_cancel: bool, expe
 def test_unknown_language_is_rejected() -> None:
     with pytest.raises(ValueError, match="de"):
         Config(language="de")
+
+
+def test_unit_keeps_setup_path() -> None:
+    assert 'Environment="PATH=/home/jane/.local/bin:/odd%%dir"\n' in unit("/home/jane/.local/bin:/odd%dir")
