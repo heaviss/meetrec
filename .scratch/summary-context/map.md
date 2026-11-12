@@ -19,6 +19,7 @@ label: wayfinder:map
 
 - [Как устроены сессии Claude Code на диске](01-claude-code-sessions.md): JSONL в `~/.claude/projects`, 3,2 ГБ, полно секретов в выводе инструментов; summarizer видит только выжимку meetrec (промпты, ответы, `cwd`, даты) через фильтр секретов, без `Read` по сырым файлам.
 - [Что `claude -p` позволяет ограничить и замерить](02-claude-p-flags.md): только чтение — `--tools Read,Grep,Glob` + `--strict-mcp-config`, пути — `--add-dir=`; `--model`/`--effort`; `--output-format json` даёт `total_cost_usd`; Haiku в ~20–40 раз дешевле Opus.
+- [Кто подбирает контекст: агент или meetrec](03-context-source.md): агент — `Read,Grep,Glob` с cwd в папке, которую собирает meetrec (прошлые встречи и выжимки сессий за 14 дней); +$0,2 и до 25 с на встречу, находит связи с тикетами, которые пропускает отбор по словам.
 
 ## Not yet specified
 
