@@ -16,6 +16,8 @@ CLAUDE = (
     "",
     "--setting-sources",
     "project",
+    # --tools "" leaves MCP on, and claude.ai connectors would let a transcript send Slack messages.
+    "--strict-mcp-config",
     "--system-prompt-file",
     PROMPT_FILE,
 )

@@ -66,7 +66,7 @@ tests/                  # one small test per non-trivial logic, see §11
 | `language` | `ru`: язык речи на встречах, `ru` или `en`. Выбирает модель, язык саммари и модель, которую качает `setup`. Смешанные встречи не поддерживаются, язык сам не определяется | [public-release 06](../.scratch/public-release/06-language-choice.md) |
 | `user_name` | полное имя из поля GECOS (`pwd`, до первой запятой), если пусто — логин | 07 |
 | `glossary_repo` | нет: без него саммари идёт без словаря | 07 |
-| `summary_command` | `["claude", "-p", "--no-session-persistence", "--tools", "", "--setting-sources", "project", "--system-prompt-file", "{prompt_file}"]`: summarizer, argv без shell. `[]` выключает саммари | 07 |
+| `summary_command` | `["claude", "-p", "--no-session-persistence", "--tools", "", "--setting-sources", "project", "--strict-mcp-config", "--system-prompt-file", "{prompt_file}"]`: summarizer, argv без shell. `--strict-mcp-config` отключает MCP и коннекторы claude.ai: `--tools ""` их не трогает, а транскрипт — недоверенный вход ([02](../.scratch/summary-context/02-claude-p-flags.md)). `[]` выключает саммари | 07 |
 | `summary_timeout_s` | `900` | 07 |
 | `audio_retention_days` | `0`: не удалять. Иначе у встреч в `done` старше стольких дней от `started_at` удаляются `*.wav`; текст и `meta.json` остаются. Проверка при старте демона и после каждой обработанной встречи, без таймера | [summary-context](../.scratch/summary-context/map.md) |
 | `app_denylist` | `["org.PulseAudio.pavucontrol"]` (по `application.id`) | 01 |
@@ -189,7 +189,7 @@ Worker запускается отдельным процессом под `nice
      ```
    - Текст идёт как распознан, без чистки.
 4. **Саммари** (`summary.py`) → 07:
-   - Вызов: `summary_command` из временной папки, вход через stdin, `summary.md` — его stdout. `{prompt_file}` в аргументах заменяется путём к файлу с системным промптом; если в команде его нет, системный промпт идёт в начало stdin перед `<glossary>`. По умолчанию — `claude -p --no-session-persistence --tools "" --setting-sources project --system-prompt-file {prompt_file}`. Таймаут — `summary_timeout_s`. Вход:
+   - Вызов: `summary_command` из временной папки, вход через stdin, `summary.md` — его stdout. `{prompt_file}` в аргументах заменяется путём к файлу с системным промптом; если в команде его нет, системный промпт идёт в начало stdin перед `<glossary>`. По умолчанию — `claude -p --no-session-persistence --tools "" --setting-sources project --strict-mcp-config --system-prompt-file {prompt_file}`. Таймаут — `summary_timeout_s`. Вход:
      ```
      <glossary>
      ### <path>
