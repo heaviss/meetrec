@@ -17,6 +17,8 @@ label: wayfinder:map
 
 ## Decisions so far
 
+- [Что `claude -p` позволяет ограничить и замерить](02-claude-p-flags.md): только чтение — `--tools Read,Grep,Glob` + `--strict-mcp-config`, пути — `--add-dir=`; `--model`/`--effort`; `--output-format json` даёт `total_cost_usd`; Haiku в ~20–40 раз дешевле Opus.
+
 ## Not yet specified
 
 - Сколько контекста влезает в бюджет: лимит по токенам или по числу встреч и сессий, что делать при переполнении.
