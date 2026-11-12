@@ -1,7 +1,7 @@
 ---
 type: prototype
 status: open
-assignee:
+assignee: claude
 blocked_by: [01, 02]
 ---
 
