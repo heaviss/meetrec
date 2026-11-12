@@ -1,0 +1,92 @@
+[
+ {
+  "meeting": "2026-11-11-1701",
+  "variant": "none",
+  "s": 45,
+  "usd": 0.731,
+  "turns": 1,
+  "in": 79336,
+  "out": 4803,
+  "stdin_chars": 194540
+ },
+ {
+  "meeting": "2026-11-11-1701",
+  "variant": "meetrec",
+  "s": 54,
+  "usd": 0.965,
+  "turns": 1,
+  "in": 106846,
+  "out": 5504,
+  "stdin_chars": 254671
+ },
+ {
+  "meeting": "2026-11-11-1701",
+  "variant": "agent",
+  "s": 36,
+  "usd": 0.788,
+  "turns": 4,
+  "in": 252517,
+  "out": 3559,
+  "stdin_chars": 194540
+ },
+ {
+  "meeting": "2026-11-12-1300",
+  "variant": "none",
+  "s": 27,
+  "usd": 0.587,
+  "turns": 1,
+  "in": 66960,
+  "out": 2585,
+  "stdin_chars": 166813
+ },
+ {
+  "meeting": "2026-11-12-1300",
+  "variant": "meetrec",
+  "s": 29,
+  "usd": 0.811,
+  "turns": 1,
+  "in": 94328,
+  "out": 2805,
+  "stdin_chars": 226755
+ },
+ {
+  "meeting": "2026-11-12-1300",
+  "variant": "agent",
+  "s": 41,
+  "usd": 0.701,
+  "turns": 4,
+  "in": 214903,
+  "out": 3595,
+  "stdin_chars": 166813
+ },
+ {
+  "meeting": "2026-11-12-1400",
+  "variant": "none",
+  "s": 25,
+  "usd": 0.064,
+  "turns": 1,
+  "in": 68725,
+  "out": 2384,
+  "stdin_chars": 170487
+ },
+ {
+  "meeting": "2026-11-12-1400",
+  "variant": "meetrec",
+  "s": 48,
+  "usd": 0.869,
+  "turns": 1,
+  "in": 96387,
+  "out": 4895,
+  "stdin_chars": 230655
+ },
+ {
+  "meeting": "2026-11-12-1400",
+  "variant": "agent",
+  "s": 49,
+  "usd": 0.773,
+  "turns": 6,
+  "in": 381843,
+  "out": 4869,
+  "stdin_chars": 170487
+ }
+]
