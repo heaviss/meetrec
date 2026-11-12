@@ -17,6 +17,7 @@ label: wayfinder:map
 
 ## Decisions so far
 
+- [Как устроены сессии Claude Code на диске](01-claude-code-sessions.md): JSONL в `~/.claude/projects`, 3,2 ГБ, полно секретов в выводе инструментов; summarizer видит только выжимку meetrec (промпты, ответы, `cwd`, даты) через фильтр секретов, без `Read` по сырым файлам.
 - [Что `claude -p` позволяет ограничить и замерить](02-claude-p-flags.md): только чтение — `--tools Read,Grep,Glob` + `--strict-mcp-config`, пути — `--add-dir=`; `--model`/`--effort`; `--output-format json` даёт `total_cost_usd`; Haiku в ~20–40 раз дешевле Opus.
 
 ## Not yet specified
