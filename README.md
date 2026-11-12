@@ -99,14 +99,13 @@ After editing: `systemctl --user restart meetrec`.
 
 Each meeting is a folder with the date in its name; delete it whole. The commands below touch only such folders. Leave alone a meeting that is being recorded or processed: `meetrec status` shows it.
 
-Delete audio older than 30 days from meetings that are already transcribed, keep the text:
+To drop audio older than 30 days from meetings that are already transcribed and keep the text, add to the config:
 
-```bash
-find ~/Recordings -mindepth 2 -maxdepth 2 -path "$HOME/Recordings/20*" -name '*.wav' -mtime +30 \
-  -execdir test -e transcript.md ';' -delete
+```toml
+audio_retention_days = 30         # the default 0 keeps audio forever
 ```
 
-Audio of a meeting without `transcript.md` (an error, or still queued) stays. After this, `meetrec redo --transcript` still works for the meeting, `redo --all` does not: there is nothing left to transcribe.
+The daemon checks on start and after each processed meeting. Audio of a meeting with an error or still in the queue stays. After this, `meetrec redo --transcript` still works for the meeting, `redo --all` refuses: there is nothing left to transcribe.
 
 Delete meetings older than 90 days:
 

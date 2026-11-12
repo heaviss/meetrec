@@ -68,6 +68,7 @@ tests/                  # one small test per non-trivial logic, see §11
 | `glossary_repo` | нет: без него саммари идёт без словаря | 07 |
 | `summary_command` | `["claude", "-p", "--no-session-persistence", "--tools", "", "--setting-sources", "project", "--system-prompt-file", "{prompt_file}"]`: summarizer, argv без shell. `[]` выключает саммари | 07 |
 | `summary_timeout_s` | `900` | 07 |
+| `audio_retention_days` | `0`: не удалять. Иначе у встреч в `done` старше стольких дней от `started_at` удаляются `*.wav`; текст и `meta.json` остаются. Проверка при старте демона и после каждой обработанной встречи, без таймера | [summary-context](../.scratch/summary-context/map.md) |
 | `app_denylist` | `["org.PulseAudio.pavucontrol"]` (по `application.id`) | 01 |
 | `data_dir` | `~/.local/share/meetrec` | 14 |
 
@@ -213,6 +214,7 @@ Worker запускается отдельным процессом под `nice
   - встречи с `error` или с `summary_done: false` без `summary_skipped`.
 - `meetrec redo <папка> [--transcript | --all] [--language ru|en]`:
   - Встречу в `recording`, `pause` или `processing` команда не трогает и печатает её статус.
+  - `--all` и `--language` отказываются, если аудио удалено по `audio_retention_days`: расшифровывать нечего.
   - Что доделывается:
     - без флага — всё, чего не хватает;
     - `--transcript` — `transcript.md` из `*.tokens.tsv`, затем саммари;
@@ -252,7 +254,7 @@ Worker запускается отдельным процессом под `nice
 - `lifecycle`: таймлайн событий переводится в нужные действия. Время инжектится, без `sleep`.
 - `watcher`: сценарии с поддельным recorder и `notify` — запись, пауза, возврат, закрытие; короткая встреча удаляется; приложения и порт пишутся в `meta.json`; мёртвый трек и молчащий микрофон дают по одному уведомлению; остановка демона закрывает или удаляет встречу и не сообщает об убитых ею `pw-record`.
 - `process`: сценарии с поддельными `Engines` — `missing` / `transcript` / `all` запускают только свои этапы; пустой трек; откат с LocalVQE на сырой `me.wav`; нет summarizer'а или он упал; упавшая расшифровка даёт `error` и сохраняет `redo`.
-- `meeting`: переходы статусов, `redo` не трогает активную встречу, `outcome`; восстановление после падения — `recording` уходит в `queued` с длительностью по `me.wav`, упавшая в Паузе сохраняет момент освобождения, короткая удаляется; битый `meta.json` пропускается.
+- `meeting`: переходы статусов, `redo` не трогает активную встречу, `outcome`; `audio_retention_days` удаляет только аудио старых встреч в `done`, после чего `redo --all` отказывает; восстановление после падения — `recording` уходит в `queued` с длительностью по `me.wav`, упавшая в Паузе сохраняет момент освобождения, короткая удаляется; битый `meta.json` пропускается.
 - `processing`: worker, умерший до начала работы, даёт `error`; `SIGSTOP` не трогает этап `summary`; бюджет считает только время работы.
 - `audio`: заголовок WAV, обрезанный как после `SIGKILL`, чинится, и `wave.open` читает верное число кадров.
 - `transcript`: границы фраз, формат строк и чередование `me`/`them` — на синтетических токенах. Фрагменты настоящих встреч в репозиторий не кладём: это чужая речь.

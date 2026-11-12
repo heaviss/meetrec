@@ -143,9 +143,11 @@ class Meeting:
         self.update(status=Status.queued, stopped_at=self.stopped_at or now_iso(), gaps=gaps)
 
     def queue(self, redo: str, language: str | None = None) -> None:
+        name = self.path.name
         if self.status in ACTIVE:
-            name = self.path.name
             raise ValueError(f"{name} is {self.status}, leaving it alone")
+        if redo == "all" and not self.has_audio:
+            raise ValueError(f"{name} has no audio left; only redo without flags or --transcript")
         fields = {"language": language} if language else {}
         self.update(status=Status.queued, redo=redo, **fields)
 
@@ -165,6 +167,14 @@ class Meeting:
         elif self.status == Status.processing:
             self.update(status=Status.queued)
         return self.status == Status.queued
+
+    @property
+    def has_audio(self) -> bool:
+        return any(self.wav(track).exists() for track in TRACKS)
+
+    def drop_audio(self) -> None:
+        for wav in (*map(self.wav, TRACKS), self.clean_me):
+            wav.unlink(missing_ok=True)
 
     def recording_end(self) -> str:
         """When the daemon died mid-meeting, the meeting ended where its recording ends."""
@@ -254,3 +264,14 @@ def load_valid(folder: Path) -> Meeting | None:
 def list_meetings(recordings_dir: Path) -> list[Meeting]:
     loaded = (load_valid(meta.parent) for meta in recordings_dir.glob("*/meta.json"))
     return sorted((meeting for meeting in loaded if meeting), key=lambda meeting: meeting.started_at)
+
+
+def prune_audio(recordings_dir: Path, retention_days: int, now: datetime | None = None) -> None:
+    """Drop the audio of transcribed meetings older than retention_days; 0 keeps everything."""
+    if not retention_days:
+        return
+    cutoff = (now or datetime.now().astimezone()) - timedelta(days=retention_days)
+    for meeting in list_meetings(recordings_dir):
+        if meeting.status == Status.done and meeting.started_at < cutoff and meeting.has_audio:
+            log.info("dropping audio of %s", meeting.path.name)
+            meeting.drop_audio()

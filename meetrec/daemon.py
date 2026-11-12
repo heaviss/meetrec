@@ -20,7 +20,7 @@ class Daemon:
         self.cfg = cfg
         self.pactl = Pactl(cfg.app_denylist)
         self.watcher = Watcher(cfg)
-        self.processing = Processing(cfg.min_meeting_s, cfg.summary_timeout_s)
+        self.processing = Processing(cfg.min_meeting_s, cfg.summary_timeout_s, cfg.audio_retention_days)
         self.rescan_requested = True
         self.last_state: dict[str, object] = {}
         self.stop = threading.Event()

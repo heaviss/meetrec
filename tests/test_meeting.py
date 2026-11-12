@@ -1,6 +1,8 @@
+from datetime import timedelta
+
 import pytest
 
-from meetrec.meeting import Meeting, Outcome, Status
+from meetrec.meeting import Meeting, Outcome, Status, prune_audio
 
 
 def test_close_keeps_release_moment(meeting: Meeting) -> None:
@@ -20,6 +22,7 @@ def test_active_meeting_is_not_requeued(meeting: Meeting) -> None:
 
 def test_queue_sets_language(meeting: Meeting) -> None:
     meeting.update(status=Status.done)
+    meeting.wav("me").touch()
 
     meeting.queue("all", "en")
 
@@ -33,7 +36,7 @@ def test_worker_death_marks_only_unfinished_work(meeting: Meeting) -> None:
     meeting.worker_died(1)
     assert meeting.status == Status.done
 
-    meeting.queue("all")
+    meeting.queue("transcript")
     meeting.worker_died(1)
     assert meeting.error == "worker exited with 1"
 
@@ -62,3 +65,28 @@ def test_outcome_follows_summary(meeting: Meeting) -> None:
 
     meeting.summary_written()
     assert meeting.outcome() == Outcome.summary
+
+
+def test_old_transcribed_audio_is_dropped(meeting: Meeting) -> None:
+    meeting.update(status=Status.done)
+    for name in ("me.wav", "them.wav", "me.clean.wav", "transcript.md"):
+        (meeting.path / name).touch()
+
+    prune_audio(meeting.path.parent, 30, meeting.started_at + timedelta(days=31))
+
+    assert sorted(path.name for path in meeting.path.iterdir()) == ["meta.json", "transcript.md"]
+    with pytest.raises(ValueError, match="no audio left"):
+        meeting.queue("all")
+
+
+KEPT = ((Status.error, 30, 31), (Status.done, 30, 29), (Status.done, 0, 999))
+
+
+@pytest.mark.parametrize(("status", "days", "age_days"), KEPT)
+def test_audio_is_kept(meeting: Meeting, status: Status, days: int, age_days: int) -> None:
+    meeting.update(status=status)
+    meeting.wav("me").touch()
+
+    prune_audio(meeting.path.parent, days, meeting.started_at + timedelta(days=age_days))
+
+    assert meeting.wav("me").exists()

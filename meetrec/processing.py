@@ -6,7 +6,7 @@ import sys
 from collections import deque
 from pathlib import Path
 
-from meetrec.meeting import Meeting, Outcome, list_meetings
+from meetrec.meeting import Meeting, Outcome, list_meetings, prune_audio
 from meetrec.notify import notify
 
 log = logging.getLogger(__name__)
@@ -28,9 +28,10 @@ def outcome(meeting: Meeting) -> str:
 class Processing:
     """FIFO of closed meetings and the one worker process that handles them."""
 
-    def __init__(self, min_meeting_s: float, summary_timeout_s: float = 900) -> None:
+    def __init__(self, min_meeting_s: float, summary_timeout_s: float = 900, audio_retention_days: int = 0) -> None:
         self.min_meeting_s = min_meeting_s
         self.summary_timeout_s = summary_timeout_s
+        self.audio_retention_days = audio_retention_days
         self.pending: deque[Path] = deque()
         self.worker: subprocess.Popen[bytes] | None = None
         self.current: Path | None = None
@@ -44,6 +45,7 @@ class Processing:
             self.pending.append(path)
 
     def scan(self, recordings_dir: Path, recording: Path | None) -> None:
+        prune_audio(recordings_dir, self.audio_retention_days)
         for meeting in list_meetings(recordings_dir):
             if meeting.path in {recording, self.current}:
                 continue
@@ -111,3 +113,5 @@ class Processing:
         if returncode:
             meeting.worker_died(returncode)
         notify(outcome(meeting))
+        # No timer: start and each finished meeting are often enough while meetings keep coming.
+        prune_audio(meeting.path.parent, self.audio_retention_days)

@@ -39,6 +39,7 @@ class Config:
     glossary_repo: Path | None = None
     summary_command: tuple[str, ...] = CLAUDE
     summary_timeout_s: float = 900
+    audio_retention_days: int = 0
     language: str = "ru"
     app_denylist: tuple[str, ...] = ("org.PulseAudio.pavucontrol",)
     data_dir: Path = Path.home() / ".local/share/meetrec"
