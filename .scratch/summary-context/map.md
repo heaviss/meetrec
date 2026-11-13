@@ -27,7 +27,8 @@ label: wayfinder:map
 
 ## Not yet specified
 
-- Термин для «контекста из прошлого» в `GLOSSARY.md`, когда устоится.
+<!-- пусто: решения перенесены в SPEC.md (§3 конфиг, §9 саммари), README и GLOSSARY.md (Past context, People list, Glossary); дальше — код -->
+
 
 ## Out of scope
 

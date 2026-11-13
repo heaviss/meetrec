@@ -1,6 +1,6 @@
 # meetrec — спецификация первой версии
 
-Демон для Linux. Сам замечает звонок, пишет две дорожки: `me` (микрофон) и `them` (системный вывод). Локально расшифровывает их (русский — GigaAM-v3, английский — Parakeet TDT 0.6B v2) и кладёт в папку встречи `transcript.md` и `summary.md`. Термины — в [GLOSSARY.md](../GLOSSARY.md). Почему решено именно так, рассказывают тикеты [карты](map.md); здесь только *что* строить. Ссылка вида «→ 08» ведёт на тикет `08-*.md` рядом.
+Демон для Linux. Сам замечает звонок, пишет две дорожки: `me` (микрофон) и `them` (системный вывод). Локально расшифровывает их (русский — GigaAM-v3, английский — Parakeet TDT 0.6B v2) и кладёт в папку встречи `transcript.md` и `summary.md`. Термины — в [GLOSSARY.md](../GLOSSARY.md). Почему решено именно так, рассказывают тикеты [карты](map.md); здесь только *что* строить. Ссылка вида «→ 08» ведёт на тикет `08-*.md` рядом, «→ sc 03» — на тикет карты [summary-context](../.scratch/summary-context/map.md).
 
 Машина: Ryzen 5 5600H, iGPU Vega (RADV), без NVIDIA. PipeWire 1.0.5 + WirePlumber 0.4.17, Cinnamon/X11. Python 3.14 через `uv`.
 
@@ -12,6 +12,7 @@
 - расшифровка на русском или английском, один язык на встречу;
 - подавление эха только при динамиках и только с `echo_cancel = true`;
 - транскрипт и саммари через summarizer — команду из конфига, по умолчанию `claude -p`;
+- прошлый контекст для саммари: прошлые встречи и выжимки сессий Claude Code;
 - `status` / `redo` / `setup`.
 
 Не входит:
@@ -45,6 +46,7 @@ meetrec/
   audio.py              # 16 kHz mono s16 WAV I/O, WAV header repair
   transcript.py         # tokens → phrase lines → transcript.md
   summary.py            # prompt + summarizer
+  context.py            # past context folder: past meetings, Claude Code session digests, secret filter
   install.py            # meetrec setup
   prompt.md             # summary prompt
 tests/                  # one small test per non-trivial logic, see §11
@@ -65,8 +67,9 @@ tests/                  # one small test per non-trivial logic, see §11
 | `echo_cancel` | `false`: в наушниках гнездо не всегда распознаётся, и PipeWire показывает `[Out] Speaker` | 11 |
 | `language` | `ru`: язык речи на встречах, `ru` или `en`. Выбирает модель, язык саммари и модель, которую качает `setup`. Смешанные встречи не поддерживаются, язык сам не определяется | [public-release 06](../.scratch/public-release/06-language-choice.md) |
 | `user_name` | полное имя из поля GECOS (`pwd`, до первой запятой), если пусто — логин | 07 |
-| `glossary_repo` | нет: без него саммари идёт без словаря | 07 |
-| `summary_command` | `["claude", "-p", "--no-session-persistence", "--tools", "", "--setting-sources", "project", "--strict-mcp-config", "--system-prompt-file", "{prompt_file}"]`: summarizer, argv без shell. `--strict-mcp-config` отключает MCP и коннекторы claude.ai: `--tools ""` их не трогает, а транскрипт — недоверенный вход ([02](../.scratch/summary-context/02-claude-p-flags.md)). `[]` выключает саммари | 07 |
+| `glossary_repo` | нет: без него саммари идёт без словаря. Словарь идёт целиком в stdin, не в папку контекста (→ sc 07) | 07 |
+| `summary_command` | `["claude", "-p", "--no-session-persistence", "--model", "opus", "--effort", "medium", "--tools", "Read,Grep,Glob", "--permission-mode", "dontAsk", "--setting-sources", "project", "--strict-mcp-config", "--system-prompt-file", "{prompt_file}"]`: summarizer, argv без shell. Инструменты только на чтение, cwd — папка контекста (§9). `--strict-mcp-config` отключает MCP и коннекторы claude.ai: `--tools` их не трогает, а транскрипт — недоверенный вход (→ sc 02). Модель — алиас, effort явный: на `low` агент не читает папку контекста (→ sc 04, sc 05). `[]` выключает саммари | 07 |
+| `context_days` | `14`: за сколько дней до старта встречи собирается прошлый контекст. `0` выключает его, папка контекста остаётся пустой. Лимита по размеру нет: агент читает папку точечно (→ sc 07) | sc 03 |
 | `summary_timeout_s` | `900` | 07 |
 | `audio_retention_days` | `0`: не удалять. Иначе у встреч в `done` старше стольких дней от `started_at` удаляются `*.wav`; текст и `meta.json` остаются. Проверка при старте демона и после каждой обработанной встречи, без таймера | [summary-context](../.scratch/summary-context/map.md) |
 | `app_denylist` | `["org.PulseAudio.pavucontrol"]` (по `application.id`) | 01 |
@@ -188,9 +191,19 @@ Worker запускается отдельным процессом под `nice
      **[00:00:34] me:** текст фразы
      ```
    - Текст идёт как распознан, без чистки.
-4. **Саммари** (`summary.py`) → 07:
-   - Вызов: `summary_command` из временной папки, вход через stdin, `summary.md` — его stdout. `{prompt_file}` в аргументах заменяется путём к файлу с системным промптом; если в команде его нет, системный промпт идёт в начало stdin перед `<glossary>`. По умолчанию — `claude -p --no-session-persistence --tools "" --setting-sources project --strict-mcp-config --system-prompt-file {prompt_file}`. Таймаут — `summary_timeout_s`. Вход:
+4. **Саммари** (`summary.py`, `context.py`) → 07, sc 03, sc 06:
+   - **Папка контекста** — временная папка, из которой запускается `summary_command`; после вызова удаляется. Если `context_days > 0`, worker перед вызовом кладёт в неё прошлый контекст за `context_days` дней до `started_at`:
+     - `meetings/<папка встречи>/summary.md` и `transcript.md` — копии прошлых встреч из `recordings_dir` (по `started_at` в `meta.json`, сама встреча не входит);
+     - `sessions/<первые 8 знаков uuid>.md` — выжимка каждой сессии Claude Code из `~/.claude/projects/*/*.jsonl`, у которой есть реплики в окне. Выжимка: заголовок (`ai-title`), самые частые `cwd` и `gitBranch`, первая и последняя метка времени, затем реплики `**user:**` и `**claude:**` — только `text` из сообщений `user` и `assistant`, без `isMeta`, без строк, начинающихся с `<`. `tool_use`, `tool_result`, `toolUseResult` и прочие строки не берутся: в них секреты (→ sc 01).
+     - Выжимка проходит фильтр секретов, совпадения заменяются на `[secret]`: блоки `-----BEGIN … PRIVATE KEY-----`, `scheme://user:pass@`, `sk-…`, `gh[pousr]_…`, `xox[abpr]-…`, `AKIA…`, `password|passwd|secret|token|api_key` с `:` или `=` и значением, любые строки из 40+ знаков base64/base64url. Фильтр грубый и съедает длинные хэши — так и задумано.
+     - Сырой JSONL в папку не попадает, и `~/.claude/projects` summarizer'у не открывается.
+     - За 14 дней сборка занимает около 4 с, папка — около 4 МБ.
+   - Вызов: `summary_command` с cwd в папке контекста, вход через stdin, `summary.md` — его stdout. `{prompt_file}` в аргументах заменяется путём к файлу с системным промптом; если в команде его нет, системный промпт идёт в начало stdin перед `<people>`. По умолчанию — opus с effort medium и инструментами `Read,Grep,Glob` (§3). Таймаут — `summary_timeout_s`. Вход:
      ```
+     <people>
+     <content of ~/.config/meetrec/people.md>
+     </people>
+
      <glossary>
      ### <path>
      <content>   # every GLOSSARY-MAP.md and *GLOSSARY.md of glossary_repo, by git ls-files
@@ -200,8 +213,11 @@ Worker запускается отдельным процессом под `nice
      …
      </transcript>
      ```
-   - Системный промпт — `meetrec/prompt.md`, по-английски. `{user_name}` подставляется из конфига, `{language}` — название языка встречи: саммари пишется на нём. Русская версия проверена на встрече 2 ноября, ветка `prototype/summary`.
-   - Без `glossary_repo` блока `<glossary>` нет.
+   - Без `~/.config/meetrec/people.md` блока `<people>` нет, без `glossary_repo` — блока `<glossary>`. Список людей — свободный Markdown, человек на строку (`- Иван Петров (Ваня) — фронт, платежи`); его ведёт пользователь, meetrec в файл не пишет (→ sc 06).
+   - Системный промпт — `meetrec/prompt.md`, по-английски. `{user_name}` подставляется из конфига, `{language}` — название языка встречи: саммари пишется на нём. Русская версия проверена на встрече 2 ноября, ветка `prototype/summary`. Кроме основы, промпт говорит:
+     - что в рабочей папке может лежать прошлый контекст (`meetings/…/summary.md`, `transcript.md`, `sessions/*.md`); искать в нём Grep, Glob и Read, чтобы восстановить искажённые термины, имена и номера тикетов и связать задачи с прошлой работой; сам контекст не пересказывать;
+     - что `<people>` — эталон написания имён, важнее glossary, прошлых саммари и транскрипта; имя из транскрипта меняется на человека из списка, только если созвучие явное или его подтверждают роль и тема, иначе остаётся как есть; роли — подсказка для владельцев задач, потому что `them` не делит речь по людям.
+     Текст обоих абзацев проверен на ветках `prototype/context-source` и `prototype/glossary-placement`.
    - Если первого слова `summary_command` нет в `PATH` или команда пуста, саммари пропускается: `summary_skipped: true`, `status` такую встречу не показывает.
    - Если summarizer упал (ненулевой код, таймаут, пустой stdout), встреча всё равно получает `done`, но с `summary_done: false`, и приходит уведомление.
 
@@ -256,6 +272,8 @@ Worker запускается отдельным процессом под `nice
 - `process`: сценарии с поддельными `Engines` — `missing` / `transcript` / `all` запускают только свои этапы; пустой трек; откат с LocalVQE на сырой `me.wav`; нет summarizer'а или он упал; упавшая расшифровка даёт `error` и сохраняет `redo`.
 - `meeting`: переходы статусов, `redo` не трогает активную встречу, `outcome`; `audio_retention_days` удаляет только аудио старых встреч в `done`, после чего `redo --all` отказывает; восстановление после падения — `recording` уходит в `queued` с длительностью по `me.wav`, упавшая в Паузе сохраняет момент освобождения, короткая удаляется; битый `meta.json` пропускается.
 - `processing`: worker, умерший до начала работы, даёт `error`; `SIGSTOP` не трогает этап `summary`; бюджет считает только время работы.
+- `context`: на синтетических JSONL и встречах во временной папке — в окно попадают только встречи и реплики за `context_days` до старта, сама встреча не входит; `tool_use`, `tool_result` и `isMeta` в выжимку не попадают; фильтр секретов заменяет ключ, токен и `user:pass@` на `[secret]`; `context_days = 0` даёт пустую папку.
+- `summary`: порядок блоков `<people>`, `<glossary>`, `<transcript>`, каждый пропадает без своего источника.
 - `audio`: заголовок WAV, обрезанный как после `SIGKILL`, чинится, и `wave.open` читает верное число кадров.
 - `transcript`: границы фраз, формат строк и чередование `me`/`them` — на синтетических токенах. Фрагменты настоящих встреч в репозиторий не кладём: это чужая речь.
 

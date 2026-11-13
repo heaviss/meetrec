@@ -8,7 +8,7 @@ How it works and why: [SPEC.md](wayfinder/SPEC.md) (in Russian), terms in [GLOSS
 
 ## Privacy
 
-Audio never leaves your machine: recording and transcription are local. The transcript text goes to the summarizer: by default your own `claude` CLI, which sends it to Anthropic. Point `summary_command` at a local model to keep the text on your machine too. Without the summarizer in `PATH`, meetrec skips the summary and keeps only the local transcript.
+Audio never leaves your machine: recording and transcription are local. The transcript text goes to the summarizer: by default your own `claude` CLI, which sends it to Anthropic. The summary also draws on past context: summaries and transcripts of your meetings from the last 14 days and digests of your Claude Code sessions (your prompts and Claude's replies, never tool output, with keys and tokens masked). They go to Anthropic the same way; `context_days = 0` turns this off. Point `summary_command` at a local model to keep the text on your machine too. Without the summarizer in `PATH`, meetrec skips the summary and keeps only the local transcript.
 
 ## Languages
 
@@ -84,6 +84,8 @@ glossary_repo = "~/src/work-repo" # a git repo whose GLOSSARY*.md files help the
 
 `glossary_repo` adds every `GLOSSARY-MAP.md` and `*GLOSSARY.md` tracked in that repo to the summary input. Without it the summary has no glossary.
 
+`~/.config/meetrec/people.md` lists your colleagues, one per line: `- Alex Smith (Alex) — frontend, payments`. The summary takes name spelling from it and uses the roles to guess who owns a task. You keep it up to date; meetrec never writes to it.
+
 `summary_command` replaces `claude` with any command that reads the meeting on stdin and prints the summary to stdout. `{prompt_file}` in its arguments becomes the path to the system prompt; without it the prompt is put ahead of the transcript on stdin. `[]` turns summaries off.
 
 ```toml
@@ -92,6 +94,10 @@ summary_timeout_s = 3600          # local models are slower; the default is 900
 ```
 
 A local summarizer is not paused when a new call starts, so it shares the GPU and CPU with the call.
+
+### What a summary costs
+
+By default `claude` runs Opus at medium effort and searches the past context with read-only tools: about $0.75 per 30–60 minute meeting at API prices; on a Claude subscription it counts against your plan's usage limits instead. The glossary is about half of that; leave `glossary_repo` unset to save it, at the cost of more misspelled terms. For roughly $0.30 replace `"opus"` with `"sonnet"` in `summary_command`: Sonnet mixes up who owns which task and skips the past context. `CLAUDE_CODE_EFFORT_LEVEL` in the environment overrides `--effort`.
 
 After editing: `systemctl --user restart meetrec`.
 

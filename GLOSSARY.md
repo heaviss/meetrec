@@ -37,6 +37,10 @@ The command, `claude` unless the user names another, that turns a transcript int
 The project terms the summarizer checks garbled words against, taken from the glossary files of a repository the user names.
 _Avoid_: dictionary, vocabulary
 
+**Past context**:
+What the summarizer may search besides the transcript: summaries and transcripts of the user's earlier meetings and digests of their Claude Code sessions from the days before the meeting.
+_Avoid_: history, memory, context window
+
 **People list**:
 The user's colleagues with the correct spelling of their names, their roles and areas of work; the summary takes names from it before the glossary, past summaries or the transcript.
 _Avoid_: contacts, roster, team
