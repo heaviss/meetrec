@@ -1,4 +1,5 @@
 import array
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -35,7 +36,7 @@ class FakeEngines:
             raise RuntimeError("exit code 1")
         out.write_bytes(mic.read_bytes())
 
-    def summarize(self, transcript: str, language: str) -> str | None:
+    def summarize(self, transcript: str, language: str, started_at: datetime) -> str | None:
         self.summaries += 1
         if "summary" in self.fail:
             raise RuntimeError("claude returned nothing")

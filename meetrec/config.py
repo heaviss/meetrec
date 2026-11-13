@@ -12,11 +12,19 @@ CLAUDE = (
     "claude",
     "-p",
     "--no-session-persistence",
+    "--model",
+    "opus",
+    # Explicit: at low effort the agent does not read the context folder.
+    "--effort",
+    "medium",
+    # Read-only: the transcript is untrusted input, the cwd is the past context folder.
     "--tools",
-    "",
+    "Read,Grep,Glob",
+    "--permission-mode",
+    "dontAsk",
     "--setting-sources",
     "project",
-    # --tools "" leaves MCP on, and claude.ai connectors would let a transcript send Slack messages.
+    # --tools leaves MCP on, and claude.ai connectors would let a transcript send Slack messages.
     "--strict-mcp-config",
     "--system-prompt-file",
     PROMPT_FILE,
@@ -40,6 +48,7 @@ class Config:
     user_name: str = field(default_factory=default_user_name)
     glossary_repo: Path | None = None
     summary_command: tuple[str, ...] = CLAUDE
+    context_days: int = 14
     summary_timeout_s: float = 900
     audio_retention_days: int = 0
     language: str = "ru"

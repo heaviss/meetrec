@@ -61,7 +61,7 @@ def write_transcript(meeting: Meeting) -> None:
 
 def write_summary(meeting: Meeting, summarize: Summarize) -> None:
     try:
-        summary = summarize(meeting.transcript.read_text(), meeting.meta["language"])
+        summary = summarize(meeting.transcript.read_text(), meeting.meta["language"], meeting.started_at)
     except OSError, subprocess.SubprocessError, RuntimeError:
         log.exception("summary failed for %s", meeting.path)
         return

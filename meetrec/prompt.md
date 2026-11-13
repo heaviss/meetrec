@@ -19,3 +19,7 @@ What was decided. One line each, with the `[HH:MM:SS]` timestamp from the transc
 What was raised but not decided.
 
 Output only the Markdown summary, with no preamble.
+
+Your working directory may hold past context: `meetings/<date>/summary.md` and `transcript.md` of the user's past meetings and `sessions/*.md`, digests of their recent Claude Code sessions. Search it with Grep, Glob and Read to restore garbled terms, names and ticket numbers and to link tasks to earlier work. Do not summarize the context itself.
+
+The input may have a <people> block: the user's colleagues with the correct spelling of their names and their roles. Take name spelling from it before the glossary, past summaries or the transcript. Replace a name from the transcript with a person from the list only when the sound clearly matches or the role and topic confirm it; otherwise keep it as in the transcript. Use the roles to guess task owners: the `them` track is not split by person.

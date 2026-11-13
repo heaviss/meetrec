@@ -8,6 +8,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 
@@ -20,7 +21,7 @@ log = logging.getLogger(__name__)
 
 Transcribe = Callable[[Path, Path, str], None]
 CleanMe = Callable[[Path, Path, Path], None]
-Summarize = Callable[[str, str], str | None]
+Summarize = Callable[[str, str, datetime], str | None]
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,7 @@ class Engines:
     """What processing runs on a meeting's audio and text.
 
     transcribe(wav, tsv, language) and clean_me(mic, ref, out) raise RuntimeError on failure;
-    summarize(transcript, language) returns None when there is no summarizer at all.
+    summarize(transcript, language, started_at) returns None when there is no summarizer at all.
     """
 
     transcribe: Transcribe
@@ -65,10 +66,10 @@ def clean_me_in_child(mic: Path, ref: Path, out: Path) -> None:
         raise RuntimeError(f"exit code {returncode}")
 
 
-def summarize_if_available(cfg: Config, transcript: str, language: str) -> str | None:
+def summarize_if_available(cfg: Config, transcript: str, language: str, started_at: datetime) -> str | None:
     if not summarizer_available(cfg.summary_command):
         return None
-    return summarize(transcript, cfg, language)
+    return summarize(transcript, cfg, language, started_at)
 
 
 def main() -> None:
