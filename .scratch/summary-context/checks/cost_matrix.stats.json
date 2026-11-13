@@ -1,0 +1,387 @@
+{
+ "rows": [
+  {
+   "meeting": "2026-11-11-1701",
+   "cell": "opus-medium",
+   "s": 42,
+   "usd": 0.833,
+   "turns": 5,
+   "in": 258716,
+   "out": 3646,
+   "stdin_chars": 194702,
+   "score": 18,
+   "marks": {
+    "facts": 4,
+    "tasks": 4,
+    "decisions": 4,
+    "terms": 3,
+    "brevity": 3
+   }
+  },
+  {
+   "meeting": "2026-11-11-1701",
+   "cell": "opus-low",
+   "s": 21,
+   "usd": 0.698,
+   "turns": 1,
+   "in": 82180,
+   "out": 2040,
+   "stdin_chars": 194702,
+   "score": 19,
+   "marks": {
+    "facts": 4,
+    "tasks": 3,
+    "decisions": 4,
+    "terms": 4,
+    "brevity": 4
+   }
+  },
+  {
+   "meeting": "2026-11-11-1701",
+   "cell": "sonnet-medium",
+   "s": 17,
+   "usd": 0.349,
+   "turns": 1,
+   "in": 82184,
+   "out": 1981,
+   "stdin_chars": 194702,
+   "score": 19,
+   "marks": {
+    "facts": 4,
+    "tasks": 3,
+    "decisions": 4,
+    "terms": 4,
+    "brevity": 4
+   }
+  },
+  {
+   "meeting": "2026-11-11-1701",
+   "cell": "sonnet-low",
+   "s": 16,
+   "usd": 0.348,
+   "turns": 1,
+   "in": 82184,
+   "out": 1906,
+   "stdin_chars": 194702,
+   "score": 16,
+   "marks": {
+    "facts": 3,
+    "tasks": 3,
+    "decisions": 3,
+    "terms": 3,
+    "brevity": 4
+   }
+  },
+  {
+   "meeting": "2026-11-11-1701",
+   "cell": "haiku-medium",
+   "s": 39,
+   "usd": 0.022,
+   "turns": 3,
+   "in": 168260,
+   "out": 7356,
+   "stdin_chars": 194702,
+   "score": 13,
+   "marks": {
+    "facts": 2,
+    "tasks": 2,
+    "decisions": 2,
+    "terms": 3,
+    "brevity": 4
+   }
+  },
+  {
+   "meeting": "2026-11-11-1701",
+   "cell": "haiku-low",
+   "s": 21,
+   "usd": 0.018,
+   "turns": 1,
+   "in": 82205,
+   "out": 3528,
+   "stdin_chars": 194702,
+   "score": 12,
+   "marks": {
+    "facts": 2,
+    "tasks": 2,
+    "decisions": 2,
+    "terms": 3,
+    "brevity": 3
+   }
+  },
+  {
+   "meeting": "2026-11-11-1701",
+   "cell": "opus-medium-noglossary",
+   "s": 44,
+   "usd": 0.423,
+   "turns": 5,
+   "in": 151379,
+   "out": 4460,
+   "stdin_chars": 62592,
+   "score": 19,
+   "marks": {
+    "facts": 4,
+    "tasks": 4,
+    "decisions": 5,
+    "terms": 4,
+    "brevity": 2
+   }
+  },
+  {
+   "meeting": "2026-11-12-1300",
+   "cell": "opus-medium",
+   "s": 45,
+   "usd": 0.751,
+   "turns": 6,
+   "in": 368800,
+   "out": 4042,
+   "stdin_chars": 166975,
+   "score": 23,
+   "marks": {
+    "facts": 5,
+    "tasks": 5,
+    "decisions": 5,
+    "terms": 5,
+    "brevity": 3
+   }
+  },
+  {
+   "meeting": "2026-11-12-1300",
+   "cell": "opus-low",
+   "s": 16,
+   "usd": 0.047,
+   "turns": 1,
+   "in": 69804,
+   "out": 1488,
+   "stdin_chars": 166975,
+   "score": 20,
+   "marks": {
+    "facts": 4,
+    "tasks": 4,
+    "decisions": 4,
+    "terms": 4,
+    "brevity": 4
+   }
+  },
+  {
+   "meeting": "2026-11-12-1300",
+   "cell": "sonnet-medium",
+   "s": 14,
+   "usd": 0.282,
+   "turns": 1,
+   "in": 69808,
+   "out": 1452,
+   "stdin_chars": 166975,
+   "score": 18,
+   "marks": {
+    "facts": 4,
+    "tasks": 3,
+    "decisions": 3,
+    "terms": 4,
+    "brevity": 4
+   }
+  },
+  {
+   "meeting": "2026-11-12-1300",
+   "cell": "sonnet-low",
+   "s": 14,
+   "usd": 0.023,
+   "turns": 1,
+   "in": 69808,
+   "out": 1486,
+   "stdin_chars": 166975,
+   "score": 14,
+   "marks": {
+    "facts": 2,
+    "tasks": 2,
+    "decisions": 3,
+    "terms": 3,
+    "brevity": 4
+   }
+  },
+  {
+   "meeting": "2026-11-12-1300",
+   "cell": "haiku-medium",
+   "s": 46,
+   "usd": 0.018,
+   "turns": 1,
+   "in": 69829,
+   "out": 8941,
+   "stdin_chars": 166975,
+   "score": 14,
+   "marks": {
+    "facts": 3,
+    "tasks": 2,
+    "decisions": 3,
+    "terms": 3,
+    "brevity": 3
+   }
+  },
+  {
+   "meeting": "2026-11-12-1300",
+   "cell": "haiku-low",
+   "s": 19,
+   "usd": 0.002,
+   "turns": 1,
+   "in": 69829,
+   "out": 3186,
+   "stdin_chars": 166975,
+   "score": 9,
+   "marks": {
+    "facts": 1,
+    "tasks": 1,
+    "decisions": 2,
+    "terms": 2,
+    "brevity": 3
+   }
+  },
+  {
+   "meeting": "2026-11-12-1300",
+   "cell": "opus-medium-noglossary",
+   "s": 32,
+   "usd": 0.234,
+   "turns": 2,
+   "in": 44019,
+   "out": 3113,
+   "stdin_chars": 34865,
+   "score": 23,
+   "marks": {
+    "facts": 5,
+    "tasks": 5,
+    "decisions": 5,
+    "terms": 5,
+    "brevity": 3
+   }
+  },
+  {
+   "meeting": "2026-11-12-1400",
+   "cell": "opus-medium",
+   "s": 37,
+   "usd": 0.669,
+   "turns": 2,
+   "in": 148487,
+   "out": 3177,
+   "stdin_chars": 170649,
+   "score": 22,
+   "marks": {
+    "facts": 5,
+    "tasks": 5,
+    "decisions": 5,
+    "terms": 4,
+    "brevity": 3
+   }
+  },
+  {
+   "meeting": "2026-11-12-1400",
+   "cell": "opus-low",
+   "s": 17,
+   "usd": 0.051,
+   "turns": 1,
+   "in": 71569,
+   "out": 1667,
+   "stdin_chars": 170649,
+   "score": 22,
+   "marks": {
+    "facts": 5,
+    "tasks": 4,
+    "decisions": 4,
+    "terms": 5,
+    "brevity": 4
+   }
+  },
+  {
+   "meeting": "2026-11-12-1400",
+   "cell": "sonnet-medium",
+   "s": 14,
+   "usd": 0.289,
+   "turns": 1,
+   "in": 71573,
+   "out": 1486,
+   "stdin_chars": 170649,
+   "score": 15,
+   "marks": {
+    "facts": 3,
+    "tasks": 2,
+    "decisions": 4,
+    "terms": 2,
+    "brevity": 4
+   }
+  },
+  {
+   "meeting": "2026-11-12-1400",
+   "cell": "sonnet-low",
+   "s": 16,
+   "usd": 0.291,
+   "turns": 1,
+   "in": 71573,
+   "out": 1692,
+   "stdin_chars": 170649,
+   "score": 14,
+   "marks": {
+    "facts": 2,
+    "tasks": 3,
+    "decisions": 3,
+    "terms": 2,
+    "brevity": 4
+   }
+  },
+  {
+   "meeting": "2026-11-12-1400",
+   "cell": "haiku-medium",
+   "s": 39,
+   "usd": 0.018,
+   "turns": 2,
+   "in": 144087,
+   "out": 7375,
+   "stdin_chars": 170649,
+   "score": 14,
+   "marks": {
+    "facts": 2,
+    "tasks": 2,
+    "decisions": 3,
+    "terms": 3,
+    "brevity": 4
+   }
+  },
+  {
+   "meeting": "2026-11-12-1400",
+   "cell": "haiku-low",
+   "s": 15,
+   "usd": 0.015,
+   "turns": 1,
+   "in": 71594,
+   "out": 2646,
+   "stdin_chars": 170649,
+   "score": 12,
+   "marks": {
+    "facts": 2,
+    "tasks": 2,
+    "decisions": 2,
+    "terms": 2,
+    "brevity": 4
+   }
+  },
+  {
+   "meeting": "2026-11-12-1400",
+   "cell": "opus-medium-noglossary",
+   "s": 36,
+   "usd": 0.31,
+   "turns": 4,
+   "in": 78558,
+   "out": 3616,
+   "stdin_chars": 38539,
+   "score": 16,
+   "marks": {
+    "facts": 3,
+    "tasks": 4,
+    "decisions": 5,
+    "terms": 2,
+    "brevity": 2
+   }
+  }
+ ],
+ "judge_usd": [
+  0.891,
+  0.817,
+  0.78
+ ]
+}
